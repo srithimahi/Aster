@@ -6,6 +6,10 @@ pub struct Cell {
 }
 
 impl Cell {
+    pub fn character(&self) -> char {
+        self.character
+    }
+
     fn empty() -> Self {
         Self {
             character: ' ',
@@ -38,6 +42,19 @@ pub struct Terminal {
 }
 
 impl Terminal {
+    pub fn width(&self) -> usize {
+        self.width
+    }
+
+    pub fn height(&self) -> usize {
+        self.height
+    }
+
+    pub fn cell(&self, x: usize, y: usize) -> &Cell {
+        let index = self.index(x, y);
+        &self.cells[index]
+    }
+
     pub fn new(width: usize, height: usize) -> Self {
         let cells = vec![Cell::empty(); width * height];
 
@@ -77,7 +94,7 @@ impl Terminal {
         self.cursor.x += 1;
     }
 
-    fn write(&mut self, text: &str) {
+    pub fn write(&mut self, text: &str) {
         for character in text.chars() {
             self.write_char(character);
         }

@@ -28,10 +28,16 @@ struct AsterApp {
 
 impl AsterApp {
     fn new() -> Self {
+        let mut terminal = Terminal::new(80, 24);
+
+        terminal.write("Aster");
+        terminal.write("\nWelcome to the void");
+        terminal.write("\nMy first terminal renderer");
+
         Self {
             window: None,
             surface: None,
-            terminal: Terminal::new(80, 24),
+            terminal,
             renderer: Renderer::new(900, 600),
         }
     }
@@ -119,9 +125,7 @@ impl ApplicationHandler for AsterApp {
 
                 self.renderer.clear(0x101218);
 
-                self.renderer.draw_rect(
-                    20, 20, 300, 50, 0x8A7CF0,
-                );
+                self.renderer.draw_terminal(&self.terminal);
 
                 let mut buffer = surface
                     .buffer_mut()
