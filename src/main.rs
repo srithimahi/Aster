@@ -1,12 +1,15 @@
+mod pty;
+mod renderer;
+mod terminal;
+
+use pty::PtySession;
+
 use std::{
     num::NonZeroU32,
     sync::Arc,
 };
 
 use softbuffer::{Context, Surface};
-
-mod renderer;
-mod terminal;
 
 use renderer::Renderer;
 use terminal::Terminal;
@@ -15,7 +18,7 @@ use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
     event::{ElementState, WindowEvent},
-    event_loop::{ActiveEventLoop, EventLoop},
+    event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{Key, NamedKey},
     window::{Window, WindowId},
 };
@@ -25,6 +28,7 @@ struct AsterApp {
     surface: Option<Surface<Arc<Window>, Arc<Window>>>,
     terminal: Terminal,
     renderer: Renderer,
+    pty: PtySession,
 }
 
 impl AsterApp {
@@ -36,6 +40,7 @@ impl AsterApp {
             surface: None,
             terminal,
             renderer: Renderer::new(900, 600),
+            pty: PtySession::new(),
         }
     }
 }
@@ -45,6 +50,8 @@ impl ApplicationHandler for AsterApp {
         if self.window.is_some() {
             return;
         }
+
+        event_loop.set_control_flow(ControlFlow::Poll);
 
         let attributes = Window::default_attributes()
             .with_title("Aster")
@@ -69,6 +76,23 @@ impl ApplicationHandler for AsterApp {
 
         if let Some(window) = &self.window {
             window.request_redraw();
+        }
+    }
+
+    fn about_to_wait(
+        &mut self,
+        _event_loop: &ActiveEventLoop,
+    ) {
+        let mut received_output = false;
+        while let Some(output) = self.pty.try_read() {
+            self.terminal.write(&output);
+            received_output = true;
+        }
+
+        if received_output {
+            if let Some(window) = &self.window {
+                window.request_redraw();
+            }
         }
     }
 
@@ -144,16 +168,16 @@ impl ApplicationHandler for AsterApp {
 
                 match &event.logical_key {
                     Key::Named(NamedKey::Enter) => {
-                        self.terminal.write("\n");
+                        self.pty.write("\r");
                     }
 
                     Key::Named(NamedKey::Backspace) => {
-                        self.terminal.backspace();
+                        self.pty.write("\u{8}");
                     }
 
                     _ => {
                         if let Some(text) = &event.text {
-                            self.terminal.write(text);
+                            self.pty.write(text);
                         }
                     }
                 }
