@@ -70,6 +70,27 @@ impl Terminal {
         y * self.width + x
     }
 
+    pub fn backspace(&mut self) {
+        if self.cursor.x > 0 {
+            self.cursor.x -= 1;
+            
+            let index = self.index(
+                self.cursor.x,
+                self.cursor.y,
+            );
+
+            self.cells[index] = Cell::empty();
+        }
+    }
+
+    pub fn cursor_x(&self) -> usize {
+        self.cursor.x
+    }
+
+    pub fn cursor_y(&self) -> usize {
+        self.cursor.y
+    }
+
     fn put_character(&mut self, x: usize, y: usize, character: char) {
         let index = self.index(x, y);
         self.cells[index].character = character;

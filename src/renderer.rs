@@ -124,6 +124,17 @@ impl Renderer {
                 )
             }
         }
+
+        let cursor_x = padding + terminal.cursor_x() as u32 * cell_width;
+        let cursor_y = padding + terminal.cursor_y() as u32 * cell_height;
+
+        self.draw_rect(
+            cursor_x,
+            cursor_y + 10,
+            cell_width,
+            2,
+            0xE8E8F0,
+        );
     }
 
     pub fn pixels(&self) -> &[u32] {

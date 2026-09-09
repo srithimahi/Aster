@@ -14,8 +14,9 @@ use terminal::Terminal;
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
-    event::WindowEvent,
+    event::{ElementState, WindowEvent},
     event_loop::{ActiveEventLoop, EventLoop},
+    keyboard::{Key, NamedKey},
     window::{Window, WindowId},
 };
 
@@ -28,11 +29,7 @@ struct AsterApp {
 
 impl AsterApp {
     fn new() -> Self {
-        let mut terminal = Terminal::new(80, 24);
-
-        terminal.write("Aster");
-        terminal.write("\nWelcome to the void");
-        terminal.write("\nMy first terminal renderer");
+        let terminal = Terminal::new(80,24);
 
         Self {
             window: None,
@@ -138,6 +135,30 @@ impl ApplicationHandler for AsterApp {
                 buffer  
                     .present()
                     .expect("Failed to present frame")
+            }
+
+            WindowEvent::KeyboardInput { event, .. } => {
+                if event.state != ElementState::Pressed {
+                    return;
+                }
+
+                match &event.logical_key {
+                    Key::Named(NamedKey::Enter) => {
+                        self.terminal.write("\n");
+                    }
+
+                    Key::Named(NamedKey::Backspace) => {
+                        self.terminal.backspace();
+                    }
+
+                    _ => {
+                        if let Some(text) = &event.text {
+                            self.terminal.write(text);
+                        }
+                    }
+                }
+
+                window.request_redraw();
             }
 
             _ => {}
