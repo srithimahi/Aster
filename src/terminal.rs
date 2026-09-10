@@ -96,12 +96,12 @@ impl Terminal {
         self.cells[index].character = character;
     }
 
-    fn write_char(&mut self, character: char) {
+    pub fn write_char(&mut self, character: char) {
         if character == '\n' {
             self.newline();
             return;
         }
-
+    
         if self.cursor.x >= self.width {
             self.newline();
         }
@@ -157,6 +157,19 @@ impl Terminal {
             }
 
             println!();
+        }
+    }
+
+    pub fn carriage_return(&mut self) {
+        self.cursor.x = 0;
+    }
+
+    pub fn line_feed(&mut self) {
+        self.cursor.y += 1;
+
+        if self.cursor.y >= self.height {
+            self.scroll_up();
+            self.cursor.y = self.height - 1;
         }
     }
 }

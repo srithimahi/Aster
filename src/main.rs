@@ -1,7 +1,9 @@
+mod parser;
 mod pty;
 mod renderer;
 mod terminal;
 
+use parser::AnsiParser;
 use pty::PtySession;
 
 use std::{
@@ -29,6 +31,7 @@ struct AsterApp {
     terminal: Terminal,
     renderer: Renderer,
     pty: PtySession,
+    parser: AnsiParser,
 }
 
 impl AsterApp {
@@ -41,6 +44,7 @@ impl AsterApp {
             terminal,
             renderer: Renderer::new(900, 600),
             pty: PtySession::new(),
+            parser: AnsiParser::new(),
         }
     }
 }
@@ -84,8 +88,19 @@ impl ApplicationHandler for AsterApp {
         _event_loop: &ActiveEventLoop,
     ) {
         let mut received_output = false;
+
         while let Some(output) = self.pty.try_read() {
-            self.terminal.write(&output);
+            for byte in output.bytes() {
+                if let Some(response) =
+                    self.parser.process_byte(
+                        byte,
+                        &mut self.terminal,
+                    )
+                {
+                    self.pty.write(&response);
+                }
+            }
+
             received_output = true;
         }
 
