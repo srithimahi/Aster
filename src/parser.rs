@@ -5,11 +5,13 @@ enum ParserState {
     Ground, 
     Escape,
     Csi,
+    Osc,
 }
 
 pub struct AnsiParser {
     state: ParserState,
     parameters: String,
+    osc_data: String,
 }
 
 impl AnsiParser {
@@ -17,6 +19,7 @@ impl AnsiParser {
         Self {
             state: ParserState::Ground,
             parameters: String::new(),
+            osc_data: String::new(),
         }
     }
 
@@ -38,6 +41,11 @@ impl AnsiParser {
 
             ParserState::Csi => {
                 self.process_csi(byte, terminal)
+            }
+
+            ParserState::Osc => {
+                self.process_osc(byte);
+                None
             }
         }
     }
@@ -78,6 +86,11 @@ impl AnsiParser {
             b'[' => {
                 self.parameters.clear();
                 self.state = ParserState::Csi;
+            }
+
+            b']' => {
+                self.osc_data.clear();
+                self.state = ParserState::Osc;
             }
 
             _ => {
@@ -125,6 +138,20 @@ impl AnsiParser {
         self.state = ParserState::Ground;
 
         response
+    }
+
+    fn process_osc(&mut self, byte: u8) {
+        match byte {
+            0x07 => {
+                println!("OSC: {}", self.osc_data);
+                self.osc_data.clear();
+                self.state = ParserState::Ground;
+            }
+
+            _ => {
+                self.osc_data.push(byte as char);
+            } 
+        }
     }
 }
 
