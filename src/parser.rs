@@ -23,6 +23,30 @@ impl AnsiParser {
         }
     }
 
+    fn parsed_parameters(&self) -> Vec<usize> {
+        if self.parameters.is_empty() {
+            return Vec::new();
+        }
+
+        self.parameters 
+            .split(';')
+            .map(|part| {
+                part.parse::<usize>().unwrap_or(0)
+            })
+            .collect()
+    }
+
+    fn parameter_or(
+        parameters:&[usize],
+        index: usize,
+        default: usize,
+    ) -> usize {
+        match parameters.get(index) {
+            Some(&0) | None => default,
+            Some(&value) => value,
+        }
+    }
+
     pub fn process_byte(
         &mut self,
         byte: u8,
@@ -109,7 +133,56 @@ impl AnsiParser {
             return None;
         }
 
+        let parameters = self.parsed_parameters();
+
         let response = match byte {
+            b'A' => {
+                let amount = 
+                    Self::parameter_or(&parameters, 0, 1);
+
+                terminal.move_cursor_up(amount);
+                None
+            }
+
+            b'B' => {
+                let amount =
+                    Self::parameter_or(&parameters, 0, 1);
+
+                terminal.move_cursor_down(amount);
+                None
+            }
+
+            b'C' => {
+                let amount =
+                    Self::parameter_or(&parameters, 0, 1);
+                
+                terminal.move_cursor_right(amount);
+                None
+            }
+
+            b'D' => {
+                let amount = 
+                    Self::parameter_or(&parameters, 0, 1);
+                
+                terminal.move_cursor_left(amount);
+                None
+            }
+
+            b'H' | b'f' => {
+                let row =
+                    Self::parameter_or(&parameters, 0, 1);
+
+                let column =
+                    Self::parameter_or(&parameters, 1, 1);
+
+                terminal.set_cursor(
+                    column.saturating_sub(1),
+                    row.saturating_sub(1),
+                );
+
+                None
+            }
+
             b'n' if self.parameters == "6" => {
                 let row = terminal.cursor_y() + 1;
                 let column = terminal.cursor_x() + 1;
@@ -122,12 +195,17 @@ impl AnsiParser {
             }
 
             b'm' => None,
+            b'J' => {
+                let mode = Self::parameter_or(&parameters, 0, 0);
+                terminal.erase_display(mode);
+                None
+            }
 
-            b'H' | b'f' => None,
-
-            b'J' => None,
-
-            b'K' => None,
+            b'K' => {
+                let mode = Self::parameter_or(&parameters, 0, 0);
+                terminal.erase_line(mode);
+                None
+            }
 
             b'h' | b'l' => None,
 

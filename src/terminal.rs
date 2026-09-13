@@ -73,13 +73,6 @@ impl Terminal {
     pub fn backspace(&mut self) {
         if self.cursor.x > 0 {
             self.cursor.x -= 1;
-            
-            let index = self.index(
-                self.cursor.x,
-                self.cursor.y,
-            );
-
-            self.cells[index] = Cell::empty();
         }
     }
 
@@ -170,6 +163,88 @@ impl Terminal {
         if self.cursor.y >= self.height {
             self.scroll_up();
             self.cursor.y = self.height - 1;
+        }
+    }
+
+    pub fn set_cursor(&mut self, x: usize, y: usize) {
+        self.cursor.x = x.min(self.width - 1);
+        self.cursor.y = y.min(self.height - 1);
+    }
+
+    pub fn move_cursor_up(&mut self, amount: usize) {
+        self.cursor.y = self.cursor.y.saturating_sub(amount);
+    }
+
+    pub fn move_cursor_down(&mut self, amount: usize) {
+        self.cursor.y = (self.cursor.y + amount).min(self.height - 1);
+    }
+
+    pub fn move_cursor_left(&mut self, amount: usize) {
+        self.cursor.x = self.cursor.x.saturating_sub(amount);
+    }
+
+    pub fn move_cursor_right(&mut self, amount: usize) {
+        self.cursor.x = (self.cursor.x + amount).min(self.width - 1);
+    }
+
+    pub fn erase_line(&mut self, mode: usize) {
+        match mode {
+            0 => {
+                for x in self.cursor.x..self.width {
+                    let index = self.index(x, self.cursor.y);
+                    self.cells[index] = Cell::empty();
+                }
+            }
+
+            1 => {
+                for x in 0..=self.cursor.x {
+                    let index = self.index(x, self.cursor.y);
+                    self.cells[index] = Cell::empty();
+                }
+            }
+
+            2 => {
+                for x in 0..self.width {
+                    let index = self.index(x, self.cursor.y);
+                    self.cells[index] = Cell::empty();
+                }
+            }
+
+            _ => {}
+        }
+    }
+
+    pub fn erase_display(&mut self, mode: usize) {
+        match mode {
+            0 => {
+                self.erase_line(0);
+
+                for y in (self.cursor.y + 1)..self.height {
+                    for x in 0..self.width {
+                        let index = self.index(x, y);
+                        self.cells[index] = Cell::empty();
+                    }
+                }
+            }
+
+            1 => {
+                for y in 0..self.cursor.y{
+                    for x in 0..self.width {
+                        let index = self.index(x, y);
+                        self.cells[index] = Cell::empty();
+                    }
+                }
+
+                self.erase_line(1);
+            }
+
+            2 => {
+                for cell in &mut self.cells {
+                    *cell = Cell::empty();
+                }
+            }
+
+            _ => {}
         }
     }
 }
