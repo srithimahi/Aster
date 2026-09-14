@@ -19,7 +19,7 @@ use terminal::Terminal;
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
-    event::{ElementState, WindowEvent},
+    event::{ElementState, MouseScrollDelta, WindowEvent},
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{Key, NamedKey},
     window::{Window, WindowId},
@@ -177,6 +177,26 @@ impl ApplicationHandler for AsterApp {
                 buffer  
                     .present()
                     .expect("Failed to present frame")
+            }
+
+            WindowEvent::MouseWheel { delta, ..} => {
+                let lines = match delta {
+                    MouseScrollDelta::LineDelta(_, y) => {
+                        y.round() as i32
+                    }
+
+                    MouseScrollDelta::PixelDelta(position) => {
+                        (position.y / 22.0).round() as i32
+                    }
+                };
+
+                if lines > 0 {
+                    self.terminal.scroll_view_up(lines as usize);
+                } else if lines < 0 {
+                    self.terminal.scroll_view_down((-lines) as usize);
+                }
+
+                window.request_redraw();
             }
 
             WindowEvent::KeyboardInput { event, .. } => {
