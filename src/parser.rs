@@ -85,6 +85,7 @@ impl AnsiParser {
             }
 
             b'\r' => {
+                
                 terminal.carriage_return();
             }
 

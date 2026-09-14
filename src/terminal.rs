@@ -39,6 +39,8 @@ pub struct Terminal {
     height: usize,
     cells: Vec<Cell>,
     cursor: Cursor,
+    scrollback: Vec<Vec<Cell>>,
+    viewport_offset: usize,
 }
 
 impl Terminal {
@@ -63,7 +65,23 @@ impl Terminal {
             height,
             cells,
             cursor: Cursor::new(),
+            scrollback: Vec::new(),
+            viewport_offset: 0,
         }
+    }
+
+    pub fn scroll_view_up(&mut self, amount: usize) {
+        self.viewport_offset = (self.viewport_offset + amount)
+            .min(self.scrollback.len());
+    }
+
+    pub fn scroll_view_down(&mut self, amount: usize) {
+        self.viewport_offset =
+            self.viewport_offset.saturating_sub(amount);
+    }
+
+    pub fn viewport_offset(&self) -> usize {
+        self.viewport_offset
     }
 
     fn index(&self, x: usize, y: usize) -> usize {
@@ -125,10 +143,19 @@ impl Terminal {
     }
 
     fn scroll_up(&mut self) {
+        let mut old_row = Vec::with_capacity(self.width);
+
+        for x in 0..self.width {
+            let index = self.index(x, 0);
+            old_row.push(self.cells[index].clone());
+        }
+
+        self.scrollback.push(old_row);
+
         for y in 1..self.height {
             for x in 0..self.width {
                 let source_index = self.index(x, y);
-                let destination_index = self.index(x, y - 1);
+                let destination_index = self.index(x, y-1);
 
                 self.cells[destination_index] = self.cells[source_index].clone();
             }
@@ -140,6 +167,10 @@ impl Terminal {
             let index = self.index(x, last_row);
             self.cells[index] = Cell::empty();
         }
+    }
+
+    pub fn scrollback_len(&self) -> usize {
+        self.scrollback.len()
     }
 
     fn print_screen(&self) {
@@ -245,6 +276,26 @@ impl Terminal {
             }
 
             _ => {}
+        }
+    }
+
+    pub fn visible_cell(&self, x: usize, y: usize) -> &Cell {
+        if self.viewport_offset == 0 {
+            return self.cell(x,y);
+        }
+
+        let history_length = self.scrollback.len();
+
+        let viewport_start = history_length.saturating_sub(self.viewport_offset);
+
+        let virtual_row = viewport_start + y;
+
+        if virtual_row < history_length {
+            &self.scrollback[virtual_row][x]
+        } 
+        else {
+            let screen_row = virtual_row - history_length;
+            self.cell(x, screen_row)
         }
     }
 }

@@ -104,7 +104,7 @@ impl Renderer {
 
         for y in 0..terminal.height() {
             for x in 0..terminal.width() {
-                let cell = terminal.cell(x,y);
+                let cell = terminal.visible_cell(x,y);
                 let character = cell.character();
 
                 if character == ' ' {
@@ -125,16 +125,21 @@ impl Renderer {
             }
         }
 
-        let cursor_x = padding + terminal.cursor_x() as u32 * cell_width;
-        let cursor_y = padding + terminal.cursor_y() as u32 * cell_height;
+        if terminal.viewport_offset() == 0 {
+            let cursor_x =
+                padding + terminal.cursor_x() as u32 * cell_width;
 
-        self.draw_rect(
-            cursor_x,
-            cursor_y + 10,
-            cell_width,
-            2,
-            0xE8E8F0,
-        );
+            let cursor_y =
+                padding + terminal.cursor_y() as u32 * cell_height;
+
+            self.draw_rect(
+                cursor_x,
+                cursor_y + 10,
+                cell_width,
+                2,
+                0xE8E8F0,
+            );
+        }
     }
 
     pub fn pixels(&self) -> &[u32] {
