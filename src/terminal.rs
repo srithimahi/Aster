@@ -1,6 +1,8 @@
 #[derive(Clone, Debug)]
 pub struct Cell {
     character: char,
+    foreground: TerminalColor,
+    background: TerminalColor,
     bold: bool,
     underline: bool,
 }
@@ -13,9 +15,15 @@ impl Cell {
     fn empty() -> Self {
         Self {
             character: ' ',
+            foreground: TerminalColor::Default,
+            background: TerminalColor::Default,
             bold: false,
             underline: false,
         }
+    }
+
+    pub fn foreground(&self) -> &TerminalColor {
+        &self.foreground
     }
 }
 
@@ -34,6 +42,32 @@ impl Cursor {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum TerminalColor {
+    Default,
+    Indexed(u8),
+    Rgb(u8, u8, u8),
+}
+
+#[derive(Clone, Debug)]
+pub struct TextStyle {
+    foreground: TerminalColor,
+    background: TerminalColor,
+    bold: bool,
+    underline: bool,
+}
+
+impl TextStyle {
+    fn new() -> Self {
+        Self {
+            foreground: TerminalColor::Default,
+            background: TerminalColor::Default,
+            bold: false,
+            underline: false,
+        }
+    }
+}
+
 pub struct Terminal {
     width: usize,
     height: usize,
@@ -41,6 +75,7 @@ pub struct Terminal {
     cursor: Cursor,
     scrollback: Vec<Vec<Cell>>,
     viewport_offset: usize,
+    current_style: TextStyle,
 }
 
 impl Terminal {
@@ -67,6 +102,7 @@ impl Terminal {
             cursor: Cursor::new(),
             scrollback: Vec::new(),
             viewport_offset: 0,
+            current_style: TextStyle::new(),
         }
     }
 
@@ -104,7 +140,12 @@ impl Terminal {
 
     fn put_character(&mut self, x: usize, y: usize, character: char) {
         let index = self.index(x, y);
+
         self.cells[index].character = character;
+        self.cells[index].foreground = self.current_style.foreground.clone();
+        self.cells[index].background = self.current_style.background.clone();
+        self.cells[index].bold = self.current_style.bold;
+        self.cells[index].underline = self.current_style.underline;
     }
 
     pub fn write_char(&mut self, character: char) {
@@ -297,5 +338,25 @@ impl Terminal {
             let screen_row = virtual_row - history_length;
             self.cell(x, screen_row)
         }
+    }
+
+    pub fn reset_style(&mut self) {
+        self.current_style = TextStyle::new();
+    }
+
+    pub fn set_bold(&mut self, enabled: bool) {
+        self.current_style.bold = enabled;
+    }
+
+    pub fn set_underline(&mut self, enabled: bool) {
+        self.current_style.underline = enabled;
+    }
+
+    pub fn set_foreground(&mut self, color: TerminalColor) {
+        self.current_style.foreground = color;
+    }
+
+    pub fn set_background(&mut self, color: TerminalColor) {
+        self.current_style.background = color;
     }
 }

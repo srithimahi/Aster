@@ -186,7 +186,7 @@ impl ApplicationHandler for AsterApp {
                     }
 
                     MouseScrollDelta::PixelDelta(position) => {
-                        (position.y / 22.0).round() as i32
+                        (position.y / 18.0).round() as i32
                     }
                 };
 

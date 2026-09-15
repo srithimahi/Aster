@@ -1,4 +1,4 @@
-use crate::terminal::Terminal;
+use crate::terminal::{Terminal, TerminalColor};
 
 #[derive(Debug)]
 enum ParserState {
@@ -85,7 +85,7 @@ impl AnsiParser {
             }
 
             b'\r' => {
-                
+
                 terminal.carriage_return();
             }
 
@@ -195,7 +195,14 @@ impl AnsiParser {
                 ))
             }
 
-            b'm' => None,
+            b'm' => {
+                Self::process_sgr(
+                    &parameters,
+                    terminal,
+                );
+                None
+            }
+
             b'J' => {
                 let mode = Self::parameter_or(&parameters, 0, 0);
                 terminal.erase_display(mode);
@@ -230,6 +237,84 @@ impl AnsiParser {
             _ => {
                 self.osc_data.push(byte as char);
             } 
+        }
+    }
+
+    fn process_sgr(
+        parameters: &[usize],
+        terminal: &mut Terminal,
+    ) {
+        if parameters.is_empty() {
+            terminal.reset_style();
+            return;
+        }
+
+        for &parameter in parameters {
+            match parameter {
+                0 => {
+                    terminal.reset_style();
+                }
+
+                1 => {
+                    terminal.set_bold(true);
+                }
+
+                4 => {
+                    terminal.set_underline(true);
+                }
+
+                22 => {
+                    terminal.set_bold(false);
+                }
+
+                24 => {
+                    terminal.set_underline(false);
+                }
+
+                30..=37 => {
+                    let color_index = (parameter - 30) as u8;
+
+                    terminal.set_foreground(
+                        TerminalColor::Indexed(color_index),
+                    );
+                }
+
+                39 => {
+                    terminal.set_foreground(
+                        TerminalColor::Default,
+                    );
+                }
+
+                40..=47 => {
+                    let color_index = (parameter - 40) as u8;
+
+                    terminal.set_background(
+                        TerminalColor::Indexed(color_index),
+                    );
+                }
+
+                49 => {
+                    terminal.set_background(
+                        TerminalColor::Default,
+                    );
+                }
+
+                90..=96 => {
+                    let color_index = (parameter - 90 + 8) as u8;
+                    terminal.set_foreground(
+                        TerminalColor::Indexed(color_index),
+                    );
+                } 
+
+                100..=107 => {
+                    let color_index = (parameter - 100 + 8) as u8;
+                    terminal.set_background(
+                        TerminalColor::Indexed(color_index),
+                    );
+                }
+
+                _ => {}
+            }
         }
     }
 }

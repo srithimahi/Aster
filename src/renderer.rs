@@ -1,4 +1,4 @@
-use crate::terminal::Terminal;
+use crate::terminal::{Terminal, TerminalColor};
 use fontdue::{Font, FontSettings};
 
 pub struct Renderer {
@@ -61,6 +61,7 @@ impl Renderer {
         }
     }
 
+
     pub fn draw_char(
         &mut self,
         character: char,
@@ -71,6 +72,8 @@ impl Renderer {
     ) {
         let (metrics, bitmap) =
             self.font.rasterize(character, size);
+
+        let baseline_y = y as i32 + size as i32;
 
         for glyph_y in 0..metrics.height {
             for glyph_x in 0..metrics.width {
@@ -83,8 +86,15 @@ impl Renderer {
                     continue;
                 }
 
-                let target_x = x + glyph_x as u32;
-                let target_y = y + glyph_y as u32;
+                let target_x = x as i32 + metrics.xmin + glyph_x as i32;
+                let target_y = baseline_y - metrics.ymin - metrics.height as i32 + glyph_y as i32;
+
+                if target_x < 0 || target_y < 0 {
+                    continue;
+                }
+
+                let target_x = target_x as u32;
+                let target_y = target_y as u32;
 
                 if target_x >= self.width || target_y >= self.height {
                     continue;
@@ -99,7 +109,7 @@ impl Renderer {
 
     pub fn draw_terminal(&mut self, terminal: &Terminal) {
         let cell_width = 12;
-        let cell_height = 22;
+        let cell_height = 18;
         let padding = 20;
 
         for y in 0..terminal.height() {
@@ -115,12 +125,14 @@ impl Renderer {
 
                 let pixel_y = padding + y as u32 * cell_height;
 
+                let color = terminal_color(cell.foreground());
+
                 self.draw_char(
                     character,
                     pixel_x,
                     pixel_y,
                     19.0,
-                    0xE8E8F0,
+                    color,
                 )
             }
         }
@@ -134,7 +146,7 @@ impl Renderer {
 
             self.draw_rect(
                 cursor_x,
-                cursor_y + 10,
+                cursor_y + cell_height - 2,
                 cell_width,
                 2,
                 0xE8E8F0,
@@ -144,6 +156,37 @@ impl Renderer {
 
     pub fn pixels(&self) -> &[u32] {
         &self.pixels
+    }
+}
+
+fn terminal_color(color: &TerminalColor) -> u32 {
+    match color {
+        TerminalColor::Default => 0xE8E8F0,
+
+        TerminalColor::Indexed(index) => {
+            0 => 0x000000,
+            1 => 0xCC5555,
+            2 => 0x55CC55,
+            3 => 0xCCCC55,
+            4 => 0x5555CC,
+            5 => 0xCC55CC,
+            6 => 0x55CCCC,
+            7 => 0xCCCCCC,
+            8 => 0x555555,
+            9 => 0xFF7777,
+            10 => 0x77FF77,
+            11 => 0xFFFF77,
+            12 => 0x7777FF,
+            13 => 0xFF77FF,
+            14 => 0x77FFFF,
+            15 => 0xFFFFFF,
+
+            _ => 0xE8E8F0,
+        }
+    }
+
+    TerminalColor::Rgb(red, green, blue) => {
+        ((*red as u32) << 16) | ((*green as u32) << 8) | (*blue as u32)
     }
 }
 
