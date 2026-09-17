@@ -117,22 +117,37 @@ impl Renderer {
                 let cell = terminal.visible_cell(x,y);
                 let character = cell.character();
 
+                let pixel_x = padding + x as u32 * cell_width;
+                let pixel_y = padding + y as u32 * cell_height;
+
+                let background = terminal_color(cell.background());
+
+                if !matches!(
+                    cell.background(),
+                    TerminalColor::Default
+                ) {
+                    let background = terminal_color(cell.background());
+                    self.draw_rect(
+                        pixel_x,
+                        pixel_y,
+                        cell_width,
+                        cell_height,
+                        background,
+                    );
+                }
+
                 if character == ' ' {
                     continue;
                 }
 
-                let pixel_x = padding + x as u32 * cell_width;
-
-                let pixel_y = padding + y as u32 * cell_height;
-
-                let color = terminal_color(cell.foreground());
+                let foreground = terminal_color(cell.foreground());
 
                 self.draw_char(
                     character,
                     pixel_x,
                     pixel_y,
                     19.0,
-                    color,
+                    foreground,
                 )
             }
         }
@@ -164,29 +179,12 @@ fn terminal_color(color: &TerminalColor) -> u32 {
         TerminalColor::Default => 0xE8E8F0,
 
         TerminalColor::Indexed(index) => {
-            0 => 0x000000,
-            1 => 0xCC5555,
-            2 => 0x55CC55,
-            3 => 0xCCCC55,
-            4 => 0x5555CC,
-            5 => 0xCC55CC,
-            6 => 0x55CCCC,
-            7 => 0xCCCCCC,
-            8 => 0x555555,
-            9 => 0xFF7777,
-            10 => 0x77FF77,
-            11 => 0xFFFF77,
-            12 => 0x7777FF,
-            13 => 0xFF77FF,
-            14 => 0x77FFFF,
-            15 => 0xFFFFFF,
-
-            _ => 0xE8E8F0,
+            indexed_color(*index)
         }
-    }
 
-    TerminalColor::Rgb(red, green, blue) => {
-        ((*red as u32) << 16) | ((*green as u32) << 8) | (*blue as u32)
+        TerminalColor::Rgb(red, green, blue) => {
+            ((*red as u32) << 16) | ((*green as u32) << 8) | (*blue as u32)
+        }
     }
 }
 
@@ -198,4 +196,53 @@ fn blend_color(color: u32, coverage: u8) -> u32 {
     let blue = (color & 0xFF) * amount / 255;
 
     (red << 16) | (green << 8) | blue
+}
+
+fn indexed_color(index: u8) -> u32 {
+    match index {
+        0 => 0x000000,
+        1 => 0xCC5555,
+        2 => 0x55CC55,
+        3 => 0xCCCC55,
+        4 => 0x5555CC,
+        5 => 0xCC55CC,
+        6 => 0x55CCCC,
+        7 => 0xCCCCCC,
+
+        8 => 0x555555,
+        9 => 0xFF7777,
+        10 => 0x77FF77,
+        11 => 0xFFFF77,
+        12 => 0x7777FF,
+        13 => 0xFF77FF,
+        14 => 0x77FFFF,
+        15 => 0xFFFFFF,
+
+        16..=231 => {
+            let cube_index = index - 16;
+
+            let red = cube_index / 36;
+            let green = (cube_index % 36) / 6;
+            let blue = cube_index % 6;
+
+            let level = |value: u8| -> u32 {
+                if value == 0 {
+                    0
+                } else {
+                    55 + 40 * value as u32
+                }
+            };
+
+            let red = level(red);
+            let green = level(green);
+            let blue = level(blue);
+
+            (red << 16) | (green << 8) | blue
+        }
+
+        232..=255 => {
+            let gray = 8 + 10 * (index as u32 - 232);
+            (gray << 16) | (gray << 8) | gray
+        }
+    }
 }

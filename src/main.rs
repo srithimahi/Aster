@@ -102,9 +102,6 @@ impl ApplicationHandler for AsterApp {
             }
 
             received_output = true;
-
-            println!("Scrollback rows: {}",
-            self.terminal.scrollback_len()); 
         }
 
         if received_output {

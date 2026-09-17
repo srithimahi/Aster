@@ -249,7 +249,10 @@ impl AnsiParser {
             return;
         }
 
-        for &parameter in parameters {
+        let mut index = 0;
+
+        while index < parameters.len() {
+            let parameter = parameters[index];
             match parameter {
                 0 => {
                     terminal.reset_style();
@@ -272,49 +275,134 @@ impl AnsiParser {
                 }
 
                 30..=37 => {
-                    let color_index = (parameter - 30) as u8;
-
                     terminal.set_foreground(
-                        TerminalColor::Indexed(color_index),
+                        TerminalColor::Indexed(
+                            (parameter - 30) as u8
+                        ),
                     );
                 }
 
                 39 => {
                     terminal.set_foreground(
-                        TerminalColor::Default,
+                        TerminalColor::Default
                     );
                 }
 
                 40..=47 => {
-                    let color_index = (parameter - 40) as u8;
-
                     terminal.set_background(
-                        TerminalColor::Indexed(color_index),
+                        TerminalColor::Indexed(
+                            (parameter - 40) as u8
+                        ),
                     );
                 }
 
                 49 => {
                     terminal.set_background(
-                        TerminalColor::Default,
+                        TerminalColor::Default
                     );
                 }
 
-                90..=96 => {
-                    let color_index = (parameter - 90 + 8) as u8;
+                90..=97 => {
                     terminal.set_foreground(
-                        TerminalColor::Indexed(color_index),
+                        TerminalColor::Indexed(
+                            (parameter - 90 + 8) as u8
+                        ),
                     );
-                } 
+                }
 
                 100..=107 => {
-                    let color_index = (parameter - 100 + 8) as u8;
                     terminal.set_background(
-                        TerminalColor::Indexed(color_index),
+                        TerminalColor::Indexed(
+                            (parameter - 100 + 8) as u8
+                        ),
+                    );
+                }
+
+                38 => {
+                    index = Self::process_extended_color(
+                        parameters,
+                        index,
+                        terminal,
+                        true,
+                    );
+                }
+
+                48 => {
+                    index = Self::process_extended_color(
+                        parameters,
+                        index,
+                        terminal,
+                        false,
                     );
                 }
 
                 _ => {}
             }
+
+            index += 1;
+        }
+    }
+
+    fn process_extended_color(
+        parameters: &[usize],
+        index: usize,
+        terminal: &mut Terminal,
+        foreground: bool,
+    ) -> usize {
+        let Some(&color_type) = parameters.get(index + 1) else {
+            return index;
+        };
+
+        match color_type {
+            5 => {
+                let Some(&color_index) = parameters.get(index + 2)
+                else {
+                    return index;
+                };
+
+                let color = TerminalColor::Indexed(color_index as u8);
+
+                if foreground {
+                    terminal.set_foreground(color);
+                } else {
+                    terminal.set_background(color);
+                }
+
+                index + 2
+            }
+
+            2 => {
+                let Some(&red) = parameters.get(index + 2)
+                else {
+                    return index;
+                };
+
+                let Some(&green) = parameters.get(index + 3)
+                else {
+                    return index;
+                };
+
+                let Some(&blue) = parameters.get(index + 4)
+                else {
+                    return index;
+                };
+
+                let color = TerminalColor::Rgb(
+                    red.min(255) as u8,
+                    green.min(255) as u8,
+                    blue.min(255) as u8,
+                );
+
+                if foreground {
+                    terminal.set_foreground(color);
+                } else {
+                    terminal.set_background(color);
+                }
+
+                index + 4
+            }
+
+            _ => index,
         }
     }
 }

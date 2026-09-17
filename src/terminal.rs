@@ -25,6 +25,10 @@ impl Cell {
     pub fn foreground(&self) -> &TerminalColor {
         &self.foreground
     }
+
+    pub fn background(&self) -> &TerminalColor {
+        &self.background
+    }
 }
 
 #[derive(Debug)]
