@@ -1,0 +1,12 @@
+[window]
+padding = 20
+
+[font]
+size = 19.0
+cell_width = 12
+cell_height = 18
+
+[colors]
+background = "#160B22"
+foreground = "#FFB7E8"
+cursor = "#66FFFF"

@@ -102,16 +102,23 @@ impl Renderer {
 
                 let target_index = (target_y * self.width + target_x) as usize;
 
-                self.pixels[target_index] = blend_color(color, coverage);
+                let background = self.pixels[target_index];
+                self.pixels[target_index] = blend_color(background, color, coverage);
             }
         }
     }
 
-    pub fn draw_terminal(&mut self, terminal: &Terminal) {
-        let cell_width = 12;
-        let cell_height = 18;
-        let padding = 20;
-
+    pub fn draw_terminal(
+        &mut self,
+        terminal: &Terminal,
+        cell_width: u32,
+        cell_height: u32,
+        padding: u32,
+        font_size: f32,
+        default_foreground: u32,
+        default_background: u32,
+        cursor_color: u32,
+    ) {
         for y in 0..terminal.height() {
             for x in 0..terminal.width() {
                 let cell = terminal.visible_cell(x,y);
@@ -120,13 +127,15 @@ impl Renderer {
                 let pixel_x = padding + x as u32 * cell_width;
                 let pixel_y = padding + y as u32 * cell_height;
 
-                let background = terminal_color(cell.background());
+                let background = terminal_color(
+                    cell.background(),
+                    default_background,
+                );
 
                 if !matches!(
                     cell.background(),
-                    TerminalColor::Default
+                    TerminalColor::Default 
                 ) {
-                    let background = terminal_color(cell.background());
                     self.draw_rect(
                         pixel_x,
                         pixel_y,
@@ -140,31 +149,31 @@ impl Renderer {
                     continue;
                 }
 
-                let foreground = terminal_color(cell.foreground());
+                let foreground = terminal_color(
+                    cell.foreground(),
+                    default_foreground,
+                );
 
                 self.draw_char(
                     character,
                     pixel_x,
                     pixel_y,
-                    19.0,
+                    font_size,
                     foreground,
-                )
+                );
             }
         }
 
         if terminal.viewport_offset() == 0 {
-            let cursor_x =
-                padding + terminal.cursor_x() as u32 * cell_width;
-
-            let cursor_y =
-                padding + terminal.cursor_y() as u32 * cell_height;
+            let cursor_x = padding + terminal.cursor_x() as u32 * cell_width;
+            let cursor_y = padding + terminal.cursor_y() as u32 * cell_height;
 
             self.draw_rect(
                 cursor_x,
                 cursor_y + cell_height - 2,
                 cell_width,
                 2,
-                0xE8E8F0,
+                cursor_color,
             );
         }
     }
@@ -174,9 +183,12 @@ impl Renderer {
     }
 }
 
-fn terminal_color(color: &TerminalColor) -> u32 {
+fn terminal_color(
+    color: &TerminalColor,
+    default_color: u32,
+) -> u32 {
     match color {
-        TerminalColor::Default => 0xE8E8F0,
+        TerminalColor::Default => default_color,
 
         TerminalColor::Indexed(index) => {
             indexed_color(*index)
@@ -188,15 +200,28 @@ fn terminal_color(color: &TerminalColor) -> u32 {
     }
 }
 
-fn blend_color(color: u32, coverage: u8) -> u32 {
-    let amount = coverage as u32;
+ fn blend_color(
+    background: u32,
+    foreground: u32,
+    coverage: u8,
+ ) -> u32 {
+    let alpha = coverage as u32;
+    let inverse_alpha = 255 - alpha;
 
-    let red = ((color >> 16) & 0xFF) * amount / 255;
-    let green = ((color >> 8) & 0xFF) * amount / 255;
-    let blue = (color & 0xFF) * amount / 255;
+    let background_red = (background >> 16) & 0xFF;
+    let background_green = (background >> 8) & 0xFF;
+    let background_blue = background & 0xFF;
 
+    let foreground_red = (foreground >> 16) & 0xFF;
+    let foreground_green = (foreground >> 8) & 0xFF;
+    let foreground_blue = (foreground) & 0xFF;
+
+    let red = (foreground_red * alpha + background_red * inverse_alpha) / 255;
+    let green = (foreground_green * alpha + background_green * inverse_alpha) / 255;
+    let blue = (foreground_blue * alpha + background_blue * inverse_alpha) / 255;
+    
     (red << 16) | (green << 8) | blue
-}
+ }
 
 fn indexed_color(index: u8) -> u32 {
     match index {

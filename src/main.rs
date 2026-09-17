@@ -1,3 +1,4 @@
+mod config;
 mod parser;
 mod pty;
 mod renderer;
@@ -5,6 +6,7 @@ mod terminal;
 
 use parser::AnsiParser;
 use pty::PtySession;
+use config::{Config, parse_color};
 
 use std::{
     num::NonZeroU32,
@@ -32,10 +34,11 @@ struct AsterApp {
     renderer: Renderer,
     pty: PtySession,
     parser: AnsiParser,
+    config: Config,
 }
 
 impl AsterApp {
-    fn new() -> Self {
+    fn new(config: Config) -> Self {
         let terminal = Terminal::new(80,24);
 
         Self {
@@ -45,6 +48,7 @@ impl AsterApp {
             renderer: Renderer::new(900, 600),
             pty: PtySession::new(),
             parser: AnsiParser::new(),
+            config,
         }
     }
 }
@@ -159,9 +163,21 @@ impl ApplicationHandler for AsterApp {
                     .resize(width, height)
                     .expect("Failed to resize surface");
 
-                self.renderer.clear(0x101218);
-
-                self.renderer.draw_terminal(&self.terminal);
+                let background = parse_color(&self.config.colors.background);
+                let foreground = parse_color(&self.config.colors.foreground);
+                let cursor = parse_color(&self.config.colors.cursor);
+                
+                self.renderer.clear(background);
+                self.renderer.draw_terminal(
+                    &self.terminal,
+                    self.config.font.cell_width,
+                    self.config.font.cell_height,
+                    self.config.window.padding,
+                    self.config.font.size,
+                    foreground,
+                    background,
+                    cursor,
+                );
 
                 let mut buffer = surface
                     .buffer_mut()
@@ -183,7 +199,9 @@ impl ApplicationHandler for AsterApp {
                     }
 
                     MouseScrollDelta::PixelDelta(position) => {
-                        (position.y / 18.0).round() as i32
+                        (
+                            position.y / self.config.font.cell_height as f64
+                        ).round() as i32
                     }
                 };
 
@@ -254,12 +272,10 @@ impl ApplicationHandler for AsterApp {
 }
 
 fn main() {
-    let event_loop = 
-        EventLoop::new().expect("Failed to create the event loop");
+    let config = Config::load("aster.toml");
 
-    let mut app = AsterApp::new();
+    let event_loop = EventLoop::new().expect("Failed to create the event loop");
+    let mut app = AsterApp::new(config);
 
-    event_loop
-        .run_app(&mut app)
-        .expect("Aster crashed");
+    event_loop.run_app(&mut app).expect("SOO... it crashed");
 }
