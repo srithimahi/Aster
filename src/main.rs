@@ -210,6 +210,34 @@ impl ApplicationHandler for AsterApp {
                         self.pty.write("\u{8}");
                     }
 
+                    Key::Named(NamedKey::ArrowUp) => {
+                        self.pty.write("\x1b[A");
+                    }
+
+                    Key::Named(NamedKey::ArrowDown) => {
+                        self.pty.write("\x1b[B");
+                    }
+
+                    Key::Named(NamedKey::ArrowRight) => {
+                        self.pty.write("\x1b[C");
+                    }
+
+                    Key::Named(NamedKey::ArrowLeft) => {
+                        self.pty.write("\x1b[D");
+                    }
+
+                    Key::Named(NamedKey::Home) => {
+                        self.pty.write("\x1b[H");
+                    }
+
+                    Key::Named(NamedKey::End) => {
+                        self.pty.write("\x1b[F");
+                    }
+
+                    Key::Named(NamedKey::Delete) => {
+                        self.pty.write("\x1b[3~");
+                    }
+
                     _ => {
                         if let Some(text) = &event.text {
                             self.pty.write(text);
