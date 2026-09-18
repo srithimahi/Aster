@@ -96,4 +96,25 @@ impl PtySession {
             .flush()
             .expect("Failed to flush PTY");
     }
+
+    pub fn resize(
+        &self,
+        columns: usize,
+        rows: usize,
+    ) {
+        if columns == 0 || rows == 0 {
+            return;
+        }
+
+        let size = PtySize {
+            rows: rows.min(u16::MAX as usize) as u16,
+            cols: columns.min(u16::MAX as usize) as u16,
+            pixel_width: 0,
+            pixel_height: 0,
+        };
+
+        self.master
+            .resize(size)
+            .expect("Failed to resize man");
+    }
 }

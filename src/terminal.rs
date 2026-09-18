@@ -363,4 +363,42 @@ impl Terminal {
     pub fn set_background(&mut self, color: TerminalColor) {
         self.current_style.background = color;
     }
+
+    pub fn resize(
+        &mut self,
+        new_width: usize,
+        new_height: usize,
+    ) {
+        if new_width == 0 || new_height == 0 {
+            return;
+        }
+
+        if new_width == self.width && new_height == self.height {
+            return;
+        }
+
+        let mut new_cells = vec![Cell::empty(); new_width * new_height];
+        let copy_width = self.width.min(new_width);
+        let copy_height = self.height.min(new_height);
+
+        for y in 0..copy_height {
+            for x in 0..copy_width {
+                let old_index = y * self.width + x;
+                let new_index = y * new_width + x;
+
+                new_cells[new_index] = self.cells[old_index].clone();
+            }
+        }
+
+        self.cells = new_cells;
+        self.width = new_width;
+        self.height = new_height;
+
+        self.cursor.x = self.cursor.x.min(new_width - 1);
+        self.cursor.y = self.cursor.y.min(new_height - 1);
+
+        self.viewport_offset = self.viewport_offset.min(
+            self.scrollback.len()
+        );
+    }
 }

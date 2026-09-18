@@ -139,10 +139,52 @@ impl ApplicationHandler for AsterApp {
             }
 
             WindowEvent::Resized(size) => {
-                self.renderer.resize(size.width, size.height);
+                self.renderer.resize(
+                    size.width,
+                    size.height,
+                );
+
+                let padding =
+                    self.config.window.padding;
+
+                let cell_width =
+                    self.config.font.cell_width;
+
+                let cell_height =
+                    self.config.font.cell_height;
+
+                let usable_width =
+                    size.width.saturating_sub(
+                        padding.saturating_mul(2)
+                    );
+
+                let usable_height =
+                    size.height.saturating_sub(
+                        padding.saturating_mul(2)
+                    );
+
+                let columns =
+                    (usable_width / cell_width).max(1);
+
+                let rows =
+                    (usable_height / cell_height).max(1);
+
+                self.terminal.resize(
+                    columns as usize,
+                    rows as usize,
+                );
+
+                self.pty.resize(
+                    columns as usize,
+                    rows as usize,
+                );
 
                 println!(
-                    "Aster resized: {} x {}", size.width, size.height
+                    "Aster resized: {} x {} pixels -> {} x {} cells",
+                    size.width,
+                    size.height,
+                    columns,
+                    rows,
                 );
 
                 window.request_redraw();
