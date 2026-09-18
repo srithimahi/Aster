@@ -26,6 +26,20 @@ impl Config {
 
         toml::from_str(&contents).expect("Failed to parse config")
     }
+
+    pub fn validate(&self) {
+        if self.font.cell_width == 0 {
+            panic!("font.cell_width must be greater than 0");
+        }
+
+        if self.font.cell_height == 0 {
+            panic!("font.cell_height must be greater than 0");
+        }
+
+        if self.font.size <= 0.0 {
+            panic!("font.size must be greater than 0");
+        }
+    }
 }
 
 pub fn parse_color(color: &str) -> u32 {

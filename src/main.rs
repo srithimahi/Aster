@@ -320,6 +320,8 @@ impl ApplicationHandler for AsterApp {
 
 fn main() {
     let config = Config::load("aster.toml");
+    config.validate();
+
     let theme_path = format!("themes/{}.toml", config.theme);
     let theme = Theme::load(&theme_path);
 
