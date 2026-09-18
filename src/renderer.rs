@@ -1,4 +1,5 @@
 use crate::terminal::{Terminal, TerminalColor};
+use crate::theme::ThemePalette;
 use fontdue::{Font, FontSettings};
 
 pub struct Renderer {
@@ -118,6 +119,7 @@ impl Renderer {
         default_foreground: u32,
         default_background: u32,
         cursor_color: u32,
+        palette: &ThemePalette,
     ) {
         for y in 0..terminal.height() {
             for x in 0..terminal.width() {
@@ -130,6 +132,7 @@ impl Renderer {
                 let background = terminal_color(
                     cell.background(),
                     default_background,
+                    palette,
                 );
 
                 if !matches!(
@@ -152,6 +155,7 @@ impl Renderer {
                 let foreground = terminal_color(
                     cell.foreground(),
                     default_foreground,
+                    palette,
                 );
 
                 self.draw_char(
@@ -186,13 +190,16 @@ impl Renderer {
 fn terminal_color(
     color: &TerminalColor,
     default_color: u32,
+    palette: &ThemePalette,
 ) -> u32 {
     match color {
         TerminalColor::Default => default_color,
 
         TerminalColor::Indexed(index) => {
-            indexed_color(*index)
+            indexed_color(*index, palette)
         }
+
+        
 
         TerminalColor::Rgb(red, green, blue) => {
             ((*red as u32) << 16) | ((*green as u32) << 8) | (*blue as u32)
@@ -223,25 +230,11 @@ fn terminal_color(
     (red << 16) | (green << 8) | blue
  }
 
-fn indexed_color(index: u8) -> u32 {
+fn indexed_color(index: u8, palette: &ThemePalette,) -> u32 {
     match index {
-        0 => 0x000000,
-        1 => 0xCC5555,
-        2 => 0x55CC55,
-        3 => 0xCCCC55,
-        4 => 0x5555CC,
-        5 => 0xCC55CC,
-        6 => 0x55CCCC,
-        7 => 0xCCCCCC,
-
-        8 => 0x555555,
-        9 => 0xFF7777,
-        10 => 0x77FF77,
-        11 => 0xFFFF77,
-        12 => 0x7777FF,
-        13 => 0xFF77FF,
-        14 => 0x77FFFF,
-        15 => 0xFFFFFF,
+        0..=15 => {
+            palette.color(index)
+        }
 
         16..=231 => {
             let cube_index = index - 16;

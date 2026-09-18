@@ -3,10 +3,12 @@ mod parser;
 mod pty;
 mod renderer;
 mod terminal;
+mod theme;
 
 use parser::AnsiParser;
 use pty::PtySession;
 use config::{Config, parse_color};
+use theme::Theme;
 
 use std::{
     num::NonZeroU32,
@@ -35,10 +37,11 @@ struct AsterApp {
     pty: PtySession,
     parser: AnsiParser,
     config: Config,
+    theme: Theme,
 }
 
 impl AsterApp {
-    fn new(config: Config) -> Self {
+    fn new(config: Config, theme:Theme) -> Self {
         let terminal = Terminal::new(80,24);
 
         Self {
@@ -49,6 +52,7 @@ impl AsterApp {
             pty: PtySession::new(),
             parser: AnsiParser::new(),
             config,
+            theme,
         }
     }
 }
@@ -163,9 +167,9 @@ impl ApplicationHandler for AsterApp {
                     .resize(width, height)
                     .expect("Failed to resize surface");
 
-                let background = parse_color(&self.config.colors.background);
-                let foreground = parse_color(&self.config.colors.foreground);
-                let cursor = parse_color(&self.config.colors.cursor);
+                let background = parse_color(&self.theme.colors.background);
+                let foreground = parse_color(&self.theme.colors.foreground);
+                let cursor = parse_color(&self.theme.colors.cursor);
                 
                 self.renderer.clear(background);
                 self.renderer.draw_terminal(
@@ -177,6 +181,7 @@ impl ApplicationHandler for AsterApp {
                     foreground,
                     background,
                     cursor,
+                    &self.theme.palette,
                 );
 
                 let mut buffer = surface
@@ -273,9 +278,10 @@ impl ApplicationHandler for AsterApp {
 
 fn main() {
     let config = Config::load("aster.toml");
+    let theme_path = format!("themes/{}.toml", config.theme);
+    let theme = Theme::load(&theme_path);
 
     let event_loop = EventLoop::new().expect("Failed to create the event loop");
-    let mut app = AsterApp::new(config);
-
-    event_loop.run_app(&mut app).expect("SOO... it crashed");
+    let mut app = AsterApp::new(config, theme);
+    event_loop.run_app(&mut app).expect("SOOO... it crashed");
 }

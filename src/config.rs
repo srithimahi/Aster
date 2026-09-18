@@ -3,9 +3,9 @@ use std::fs;
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
+    pub theme: String,
     pub window: WindowConfig,
     pub font: FontConfig,
-    pub colors: ColorConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -18,13 +18,6 @@ pub struct FontConfig {
     pub size: f32,
     pub cell_width: u32,
     pub cell_height: u32,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ColorConfig {
-    pub background: String,
-    pub foreground: String,
-    pub cursor: String,
 }
 
 impl Config {
