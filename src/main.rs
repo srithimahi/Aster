@@ -28,6 +28,8 @@ use winit::{
     window::{Window, WindowId},
 };
 
+const TAB_BAR_HEIGHT: u32 = 30;
+
 struct AsterApp {
     window: Option<Arc<Window>>,
     surface: Option<Surface<Arc<Window>, Arc<Window>>>,
@@ -88,6 +90,38 @@ impl AsterApp {
 
         self.active_tab = (self.active_tab + 1) % self.tabs.len();
         println!("Switched to tabbie {}", self.active_tab + 1);
+    }
+
+    fn previous_tab(&mut self) {
+        if self.tabs.len() <= 1 {
+            return;
+        }
+        if self.active_tab == 0 {
+            self.active_tab = self.tabs.len() - 1;
+        } else {
+            self.active_tab -= 1;
+        }
+
+        println!("Switched to tabbie {}", self.active_tab + 1);
+    }
+
+    fn close_active_tab(&mut self) {
+        if self.tabs.len() <= 1 {
+            println!("Cannor close the last tabbie");
+            return;
+        }
+
+        let closed_tab = self.active_tab;
+        self.tabs.remove(closed_tab);
+        if self.active_tab >= self.tabs.len() {
+            self.active_tab = self.tabs.len() - 1;
+        }
+
+        println!(
+            "Closed tabbie {}. Active tabbie is now {}",
+            closed_tab + 1,
+            self.active_tab + 1,
+        );
     }
 }
 
@@ -185,7 +219,8 @@ impl ApplicationHandler for AsterApp {
                     );
 
                 let usable_height =
-                    size.height.saturating_sub(
+                    size.height.saturating_sub(TAB_BAR_HEIGHT)
+                    .saturating_sub(
                         padding.saturating_mul(2)
                     );
 
@@ -237,6 +272,17 @@ impl ApplicationHandler for AsterApp {
                 let cursor = parse_color(&self.theme.colors.cursor);
                 
                 self.renderer.clear(background);
+
+                self.renderer.draw_tab_bar(
+                    self.tabs.len(),
+                    self.active_tab,
+                    TAB_BAR_HEIGHT,
+                    14.0,
+                    foreground,
+                    background,
+                    cursor,
+                );
+
                 let active_tab = self.active_tab;
                 let terminal = self.tabs[active_tab].terminal();
 
@@ -246,10 +292,11 @@ impl ApplicationHandler for AsterApp {
                     self.config.font.cell_height,
                     self.config.window.padding,
                     self.config.font.size,
+                    TAB_BAR_HEIGHT,
                     foreground,
                     background,
-                    cursor,
                     &self.theme.palette,
+                    cursor,
                 );
 
                 let mut buffer = surface
@@ -308,18 +355,33 @@ impl ApplicationHandler for AsterApp {
                             window.request_redraw();
                             return;
                         }
+
+                        if character.eq_ignore_ascii_case("w") {
+                            self.close_active_tab();
+                            window.request_redraw();
+                            return;
+                        }
                     }
                 }
 
-                if control && matches!(
+                if control && shift && matches!(
                     event.logical_key,
-                    Key::Named(NamedKey::Tab) 
+                    Key::Named(NamedKey::Tab)
+                ) {
+                    self.previous_tab();
+                    window.request_redraw();
+                    return;
+                }
+
+                if control && !shift && matches!(
+                    event.logical_key,
+                    Key::Named(NamedKey::Tab)
                 ) {
                     self.next_tab();
                     window.request_redraw();
                     return;
                 }
-
+                
                 match &event.logical_key {
                     Key::Named(NamedKey::Enter) => {
                         self.active_tab_mut().write("\r");

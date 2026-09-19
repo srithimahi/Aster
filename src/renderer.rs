@@ -120,6 +120,7 @@ impl Renderer {
         default_background: u32,
         cursor_color: u32,
         palette: &ThemePalette,
+        top_offset: u32,
     ) {
         for y in 0..terminal.height() {
             for x in 0..terminal.width() {
@@ -127,7 +128,7 @@ impl Renderer {
                 let character = cell.character();
 
                 let pixel_x = padding + x as u32 * cell_width;
-                let pixel_y = padding + y as u32 * cell_height;
+                let pixel_y = top_offset + padding + y as u32 * cell_height;
 
                 let background = terminal_color(
                     cell.background(),
@@ -170,7 +171,7 @@ impl Renderer {
 
         if terminal.viewport_offset() == 0 {
             let cursor_x = padding + terminal.cursor_x() as u32 * cell_width;
-            let cursor_y = padding + terminal.cursor_y() as u32 * cell_height;
+            let cursor_y = top_offset + padding + terminal.cursor_y() as u32 * cell_height;
 
             self.draw_rect(
                 cursor_x,
@@ -184,6 +185,69 @@ impl Renderer {
 
     pub fn pixels(&self) -> &[u32] {
         &self.pixels
+    }
+
+    pub fn draw_text(
+        &mut self,
+        text: &str,
+        x: u32,
+        y: u32,
+        font_size: f32,
+        color: u32,
+    ) {
+        let mut current_x = x;
+        for character in text.chars() {
+            self.draw_char(
+                character,
+                current_x,
+                y,
+                font_size,
+                color,
+            );
+            current_x += font_size as u32;
+        }
+    }
+
+    pub fn draw_tab_bar(
+        &mut self,
+        tab_count: usize,
+        active_tab: usize,
+        height: u32,
+        font_size: f32,
+        foreground: u32,
+        background: u32,
+        active_background: u32,
+    ) {
+        self.draw_rect(
+            0,
+            0,
+            self.width,
+            height,
+            background,
+        );
+
+        let tab_width = 140;
+        for index in 0..tab_count {
+            let x = index as u32 * tab_width;
+            if index == active_tab {
+                self.draw_rect(
+                    x,
+                    0,
+                    tab_width,
+                    height,
+                    active_background,
+                );
+            }
+
+            let label = format!("Tab {}", index + 1);
+            self.draw_text(
+                &label,
+                x + 12,
+                5,
+                font_size,
+                foreground,
+            );
+        }
     }
 }
 
