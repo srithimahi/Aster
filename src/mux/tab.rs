@@ -1,13 +1,12 @@
-use crate::{
-    parser::AnsiParser,
-    pty::PtySession,
-    terminal::Terminal,
+use super::{
+    layout::PaneNode,
+    pane::Pane,
 };
 
+use crate::terminal::Terminal;
+
 pub struct Tab {
-    terminal: Terminal,
-    pty: PtySession,
-    parser: AnsiParser,
+    root: PaneNode,
 }
 
 impl Tab {
@@ -16,51 +15,40 @@ impl Tab {
         rows: usize,
     ) -> Self {
         Self {
-            terminal: Terminal::new(
+            root: PaneNode::new_pane(
                 columns,
                 rows,
             ),
-            pty: PtySession::new(),
-            parser: AnsiParser::new(),
         }
     }
 
     pub fn terminal(&self) -> &Terminal {
-        &self.terminal
+        self.root
+            .first_pane()
+            .terminal()
     }
 
     pub fn terminal_mut(
         &mut self,
     ) -> &mut Terminal {
-        &mut self.terminal
+        self.root
+            .first_pane_mut()
+            .terminal_mut()
     }
 
     pub fn write(
         &mut self,
         text: &str,
     ) {
-        self.pty.write(text);
+        self.root
+            .first_pane_mut()
+            .write(text);
     }
 
     pub fn process_output(
         &mut self,
     ) -> bool {
-        let mut received_output = false;
-
-        while let Some(output) = self.pty.try_read() {
-            for byte in output.bytes() {
-                if let Some(response) = self.parser.process_byte(
-                    byte,
-                    &mut self.terminal,
-                ) {
-                    self.pty.write(&response);
-                }
-            }
-
-            received_output = true;
-        }
-
-        received_output
+        self.root.process_output()
     }
 
     pub fn resize(
@@ -68,13 +56,31 @@ impl Tab {
         columns: usize,
         rows: usize,
     ) {
-        self.terminal.resize(
+        self.root.resize(
             columns,
             rows,
         );
-        self.pty.resize(
-            columns,
-            rows,
-        );
+    }
+
+    pub fn root(&self) -> &PaneNode {
+        &self.root
+    }
+
+    pub fn root_mut(
+        &mut self,
+    ) -> &mut PaneNode {
+        &mut self.root
+    }
+
+    pub fn active_pane(
+        &self,
+    ) -> &Pane {
+        self.root.first_pane()
+    }
+
+    pub fn active_pane_mut(
+        &mut self,
+    ) -> &mut Pane {
+        self.root.first_pane_mut()
     }
 }

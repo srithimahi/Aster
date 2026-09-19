@@ -115,12 +115,12 @@ impl Renderer {
         cell_width: u32,
         cell_height: u32,
         padding: u32,
+        top_offset: u32,
         font_size: f32,
         default_foreground: u32,
         default_background: u32,
         cursor_color: u32,
         palette: &ThemePalette,
-        top_offset: u32,
     ) {
         for y in 0..terminal.height() {
             for x in 0..terminal.width() {

@@ -291,12 +291,12 @@ impl ApplicationHandler for AsterApp {
                     self.config.font.cell_width,
                     self.config.font.cell_height,
                     self.config.window.padding,
-                    self.config.font.size,
                     TAB_BAR_HEIGHT,
+                    self.config.font.size,
                     foreground,
                     background,
-                    &self.theme.palette,
                     cursor,
+                    &self.theme.palette,
                 );
 
                 let mut buffer = surface
