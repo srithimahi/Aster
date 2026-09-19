@@ -1,5 +1,8 @@
 use super::{
-    layout::PaneNode,
+    layout::{
+        PaneNode,
+        SplitDirection,
+    },
     pane::Pane,
 };
 
@@ -82,5 +85,45 @@ impl Tab {
         &mut self,
     ) -> &mut Pane {
         self.root.first_pane_mut()
+    }
+
+    pub fn split_active(
+        &mut self,
+        direction: SplitDirection,
+    ) {
+        let columns = self.terminal().width();
+        let rows = self.terminal().height();
+
+        self.root.split(
+            direction,
+            columns,
+            rows,
+        );
+    }
+
+    pub fn for_each_pane<F>(
+        &self,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        callback: &mut F,
+    )
+    where
+        F: FnMut(
+            &Pane,
+            u32,
+            u32,
+            u32,
+            u32,
+        ),
+    {
+        self.root.for_each_pane(
+            x,
+            y,
+            width,
+            height,
+            callback,
+        );
     }
 }

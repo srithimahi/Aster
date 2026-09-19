@@ -112,10 +112,10 @@ impl Renderer {
     pub fn draw_terminal(
         &mut self,
         terminal: &Terminal,
+        origin_x: u32,
+        origin_y: u32,
         cell_width: u32,
         cell_height: u32,
-        padding: u32,
-        top_offset: u32,
         font_size: f32,
         default_foreground: u32,
         default_background: u32,
@@ -127,8 +127,8 @@ impl Renderer {
                 let cell = terminal.visible_cell(x,y);
                 let character = cell.character();
 
-                let pixel_x = padding + x as u32 * cell_width;
-                let pixel_y = top_offset + padding + y as u32 * cell_height;
+                let pixel_x = origin_x + x as u32 * cell_width;
+                let pixel_y = origin_y + y as u32 * cell_height;
 
                 let background = terminal_color(
                     cell.background(),
@@ -170,8 +170,8 @@ impl Renderer {
         }
 
         if terminal.viewport_offset() == 0 {
-            let cursor_x = padding + terminal.cursor_x() as u32 * cell_width;
-            let cursor_y = top_offset + padding + terminal.cursor_y() as u32 * cell_height;
+            let cursor_x = origin_x + terminal.cursor_x() as u32 * cell_width;
+            let cursor_y = origin_y + terminal.cursor_y() as u32 * cell_height;
 
             self.draw_rect(
                 cursor_x,

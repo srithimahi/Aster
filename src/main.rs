@@ -9,6 +9,7 @@ mod mux;
 use config::{Config, parse_color};
 use theme::Theme;
 use mux::tab::Tab;
+use mux::layout::SplitDirection;
 
 use std::{
     num::NonZeroU32,
@@ -283,20 +284,48 @@ impl ApplicationHandler for AsterApp {
                     cursor,
                 );
 
-                let active_tab = self.active_tab;
-                let terminal = self.tabs[active_tab].terminal();
+                let padding = self.config.window.padding;
+                let pane_x = padding;
+                let pane_y = TAB_BAR_HEIGHT + padding;
 
-                self.renderer.draw_terminal(
-                    terminal,
-                    self.config.font.cell_width,
-                    self.config.font.cell_height,
-                    self.config.window.padding,
-                    TAB_BAR_HEIGHT,
-                    self.config.font.size,
-                    foreground,
-                    background,
-                    cursor,
-                    &self.theme.palette,
+                let pane_width = size.width.saturating_sub(
+                    padding.saturating_mul(2)
+                );
+
+                let pane_height = size.height.saturating_sub(TAB_BAR_HEIGHT)
+                .saturating_sub(
+                    padding.saturating_mul(2)
+                );
+
+                let active_tab = self.active_tab;
+
+                let tab = &self.tabs[active_tab];
+
+                tab.for_each_pane(
+                    pane_x,
+                    pane_y,
+                    pane_width,
+                    pane_height,
+                    &mut |
+                        pane,
+                        x,
+                        y,
+                        _width,
+                        _height,
+                    | {
+                        self.renderer.draw_terminal(
+                            pane.terminal(),
+                            x,
+                            y,
+                            self.config.font.cell_width,
+                            self.config.font.cell_height,
+                            self.config.font.size,
+                            foreground,
+                            background,
+                            cursor,
+                            &self.theme.palette,
+                        );
+                    },
                 );
 
                 let mut buffer = surface
@@ -358,6 +387,20 @@ impl ApplicationHandler for AsterApp {
 
                         if character.eq_ignore_ascii_case("w") {
                             self.close_active_tab();
+                            window.request_redraw();
+                            return;
+                        }
+
+                        if character.eq_ignore_ascii_case("d") {
+                            self.active_tab_mut()
+                                .split_active(
+                                    SplitDirection::Vertical
+                                );
+                            
+                            println!(
+                                "Split active pane vertically"
+                            );
+
                             window.request_redraw();
                             return;
                         }

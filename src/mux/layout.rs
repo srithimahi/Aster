@@ -153,4 +153,123 @@ impl PaneNode {
             }
         }
     }
+
+    pub fn split(
+        &mut self,
+        direction: SplitDirection,
+        columns: usize,
+        rows: usize,
+    ) {
+        let replacement = PaneNode::new_pane(
+            columns,
+            rows,
+        );
+
+        let original = std::mem::replace(
+            self,
+            replacement,
+        );
+
+        *self = PaneNode::Split {
+            direction,
+            ratio: 0.5,
+            first: Box::new(
+                original
+            ),
+
+            second: Box::new(
+                PaneNode::new_pane(
+                    columns,
+                    rows,
+                )
+            ),
+        };
+
+        self.resize(
+            columns,
+            rows,
+        );
+    }
+
+    pub fn for_each_pane<F>(
+        &self,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        callback: &mut F,
+    )
+    where 
+        F: FnMut(
+            &Pane,
+            u32,
+            u32,
+            u32,
+            u32,
+        ),
+    {
+        match self {
+            PaneNode::Pane(pane) => {
+                callback(
+                    pane,
+                    x,
+                    y,
+                    width,
+                    height,
+                );
+            }
+
+            PaneNode::Split {
+                direction,
+                ratio,
+                first,
+                second,
+            } => {
+                match direction {
+                    SplitDirection::Vertical => {
+                        let first_width = (width as f32 * *ratio) as u32;
+                        let second_width = width.saturating_sub(first_width);
+
+                        first.for_each_pane(
+                            x,
+                            y,
+                            first_width,
+                            height,
+                            callback,
+                        );
+
+                        second.for_each_pane(
+                            x + first_width,
+                            y,
+                            second_width,
+                            height,
+                            callback,
+                        );
+                    }
+
+                    SplitDirection::Horizontal => {
+                        let first_height = (height as f32 * *ratio) as u32;
+
+                        let second_height = height.saturating_sub(first_height);
+                        
+                        first.for_each_pane(
+                            x,
+                            y,
+                            width,
+                            first_height,
+                            callback,
+                        );
+
+                        second.for_each_pane(
+                            x,
+                            y + first_height,
+                            width,
+                            second_height,
+                            callback,
+                        );
+                    }
+                }
+            }
+        }
+    }
 }
