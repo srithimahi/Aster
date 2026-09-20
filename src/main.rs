@@ -414,6 +414,16 @@ impl ApplicationHandler for AsterApp {
                             window.request_redraw();
                             return;
                         }
+
+                        if character.eq_ignore_ascii_case("e") {
+                            self.active_tab_mut()
+                                .split_active(
+                                    SplitDirection::Horizontal
+                                );
+
+                            window.request_redraw();
+                            return;
+                        }
                     }
                 }
 
