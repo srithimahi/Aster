@@ -301,22 +301,36 @@ impl ApplicationHandler for AsterApp {
 
                 let tab = &self.tabs[active_tab];
 
+                let focused_pane_id = tab.focused_pane_id();
+
                 tab.for_each_pane(
                     pane_x,
                     pane_y,
                     pane_width,
                     pane_height,
-                    &mut |
+                    &mut | 
                         pane,
                         x,
                         y,
-                        _width,
-                        _height,
+                        width,
+                        height,
                     | {
+                        if pane.id() == 
+                            focused_pane_id
+                        {
+                            self.renderer.draw_pane_border(
+                                x,
+                                y,
+                                width,
+                                height,
+                                cursor,
+                            );
+                        }
+
                         self.renderer.draw_terminal(
                             pane.terminal(),
-                            x,
-                            y,
+                            x+2,
+                            y+2,
                             self.config.font.cell_width,
                             self.config.font.cell_height,
                             self.config.font.size,
@@ -325,7 +339,7 @@ impl ApplicationHandler for AsterApp {
                             cursor,
                             &self.theme.palette,
                         );
-                    },
+                    }
                 );
 
                 let mut buffer = surface
@@ -396,14 +410,34 @@ impl ApplicationHandler for AsterApp {
                                 .split_active(
                                     SplitDirection::Vertical
                                 );
-                            
-                            println!(
-                                "Split active pane vertically"
-                            );
 
                             window.request_redraw();
                             return;
                         }
+                    }
+                }
+
+                if control && shift {
+                    match &event.logical_key {
+                        Key::Named(NamedKey::ArrowRight) => {
+                            self.active_tab_mut()
+                                .focus_next_pane();
+
+                            window.request_redraw();
+                            return;
+                        }
+
+                        Key::Named(
+                            NamedKey::ArrowLeft
+                        ) => {
+                            self.active_tab_mut()
+                                .focus_previous_pane();
+                            
+                            window.request_redraw();
+                            return;
+                        }
+
+                        _ => {}
                     }
                 }
 

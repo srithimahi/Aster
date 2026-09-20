@@ -272,4 +272,147 @@ impl PaneNode {
             }
         }
     }
+
+    pub fn find_pane(
+        &self,
+        pane_id: usize,
+    ) -> Option<&Pane> {
+        match self {
+            PaneNode::Pane(pane) => {
+                if pane.id() == pane_id {
+                    Some(pane)
+                } else {
+                    None
+                }
+            }
+
+            PaneNode::Split {
+                first,
+                second,
+                ..
+            } => {
+                first.find_pane(pane_id).or_else(|| {
+                    second.find_pane(pane_id)
+                })
+            }
+        }
+    }
+
+    pub fn find_pane_mut(
+        &mut self,
+        pane_id: usize,
+    ) -> Option<&mut Pane> {
+        match self {
+            PaneNode::Pane(pane) => {
+                if pane.id() == pane_id {
+                    Some(pane)
+                } else {
+                    None
+                }
+            }
+
+            PaneNode::Split {
+                first,
+                second,
+                ..
+            } => {
+                if let Some(pane) = first.find_pane_mut(pane_id)
+                {
+                    return Some(pane);
+                }
+
+                second.find_pane_mut(pane_id)
+            }
+        }
+    }
+
+    pub fn split_pane(
+        &mut self,
+        pane_id: usize,
+        direction: SplitDirection,
+        columns: usize,
+        rows: usize,
+    ) -> Option<usize> {
+        match self {
+            PaneNode::Pane(pane) => {
+                if pane.id() != pane_id {
+                    return None;
+                }
+
+                let new_pane = Pane::new(columns, rows);
+                let new_pane_id = new_pane.id();
+                let replacement = PaneNode::Pane(new_pane);
+                let original = std::mem::replace(
+                    self,
+                    replacement,
+                );
+
+                let second = std::mem::replace(
+                    self,
+                    PaneNode::new_pane(
+                        columns,
+                        rows,
+                    ),
+                );
+
+                *self = PaneNode::Split {
+                    direction,
+                    ratio: 0.5,
+                    first: Box::new(original),
+                    second: Box::new(second),
+                };
+
+                self.resize(
+                    columns,
+                    rows,
+                );
+
+                Some(new_pane_id)
+            }
+
+            PaneNode::Split {
+                first,
+                second,
+                ..
+            } => {
+                if let Some(new_id) = 
+                    first.split_pane(
+                        pane_id,
+                        direction,
+                        columns,
+                        rows,
+                    )
+                {
+                    return Some(new_id);
+                }
+
+                second.split_pane(
+                    pane_id,
+                    direction,
+                    columns,
+                    rows,
+                )
+            }
+        }
+    }
+
+    pub fn collect_pane_ids(
+        &self,
+        ids: &mut Vec<usize>,
+    ) {
+        match self {
+            PaneNode::Pane(pane) => {
+                ids.push(pane.id());
+            }
+
+            PaneNode::Split {
+                first,
+                second,
+                ..
+            } => {
+                first.collect_pane_ids(ids);
+                second.collect_pane_ids(ids);
+            }
+        }
+    }
 }

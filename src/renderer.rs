@@ -249,6 +249,53 @@ impl Renderer {
             );
         }
     }
+
+    pub fn draw_pane_border(
+        &mut self,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        color: u32,
+    ) {
+        if width < 2 || height < 2 {
+            return;
+        }
+
+        let thickness = 2;
+
+        self.draw_rect(
+            x,
+            y,
+            width,
+            thickness,
+            color,
+        );
+
+        self.draw_rect(
+            x,
+            y + height - thickness,
+            width,
+            thickness,
+            color,
+        );
+
+        self.draw_rect(
+            x,
+            y,
+            thickness,
+            height,
+            color,
+        );
+
+        self.draw_rect(
+            x + width - thickness,
+            y,
+            thickness,
+            height,
+            color,
+        );
+    }
 }
 
 fn terminal_color(

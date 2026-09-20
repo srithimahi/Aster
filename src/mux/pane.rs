@@ -1,10 +1,19 @@
+use std::sync::atomic::{
+    AtomicUsize,
+    Ordering,
+};
+
 use crate::{
     parser::AnsiParser,
     pty::PtySession,
     terminal::Terminal,
 };
 
+static NEXT_PANE_ID: AtomicUsize = 
+    AtomicUsize::new(1);
+
 pub struct Pane {
+    id: usize,
     terminal: Terminal,
     pty: PtySession,
     parser: AnsiParser,
@@ -15,16 +24,24 @@ impl Pane {
         columns: usize,
         rows: usize,
     ) -> Self {
-        Self {
+            Self {
+            id: NEXT_PANE_ID.fetch_add(
+                1,
+                Ordering::Relaxed,
+            ),
+
             terminal: Terminal::new(
                 columns,
                 rows,
             ),
 
             pty: PtySession::new(),
-
             parser: AnsiParser::new(),
         }
+    }
+
+    pub fn id(&self) -> usize {
+        self.id
     }
 
     pub fn terminal(&self) -> &Terminal {
