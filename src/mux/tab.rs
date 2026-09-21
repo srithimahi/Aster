@@ -1,6 +1,8 @@
 use super::{
     layout::{
+        FocusDirection,
         PaneNode,
+        PaneRect,
         SplitDirection,
     },
     pane::Pane,
@@ -200,5 +202,185 @@ impl Tab {
             };
 
         self.focused_pane = pane_ids[previous_index];
+    }
+
+    pub fn close_active_pane(
+        &mut self,
+    ) {
+        let mut pane_ids = Vec::new();
+
+        self.root.collect_pane_ids(&mut pane_ids, );
+
+        if pane_ids.len() <= 1 {
+            return;
+        }
+
+        let current_index =
+            pane_ids 
+                .iter()
+                .position(|id| {
+                    *id == self.focused_pane
+                })
+                .unwrap_or(0);
+
+        let next_focus = 
+                if current_index > 0 {
+                    pane_ids[current_index - 1]
+                } else {
+                    pane_ids[1]
+                };
+
+        if self.root.remove_pane(
+            self.focused_pane
+        ) {
+            self.focused_pane = next_focus;
+        }
+    }
+
+    pub fn for_each_separator<F>(
+        &self,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        callback: &mut F,
+    )
+    where
+        F: FnMut(
+            u32,
+            u32,
+            u32,
+            u32,
+        ),
+    {
+        self.root.for_each_separator(
+            x,
+            y,
+            width,
+            height,
+            callback,
+        );
+    }
+
+    pub fn pane_rects(
+        &self,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    ) -> Vec<PaneRect> {
+        let mut rects = Vec::new();
+        self.root.collect_pane_rects(
+            x,
+            y,
+            width,
+            height,
+            &mut rects,
+        );
+
+        rects
+    }
+
+    pub fn focus_direction(
+        &mut self,
+        direction: FocusDirection,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    ) {
+        let rects = 
+            self.pane_rects(
+                x,
+                y,
+                width,
+                height,
+            );
+
+        let Some(current) =
+            rects
+                .iter()
+                .find(|rect| {
+                    rect.pane_id == self.focused_pane
+                })
+        else {
+            return;
+        };
+
+        let current_center_x = current.x as i64 + current.width as i64 / 2;
+        let current_center_y = current.y as i64 + current.height as i64 / 2;
+
+        let mut best_pane = None;
+        let mut best_distance = i64::MAX;
+
+        for candidate in &rects {
+            if candidate.pane_id == self.focused_pane {
+                continue;
+            }
+
+            let candidate_center_x = candidate.x as i64 + candidate.width as i64 / 2;
+            let candidate_center_y = candidate.y as i64 + candidate.height as i64 / 2;
+
+            let dx = candidate_center_x - current_center_x;
+            let dy = candidate_center_y - current_center_y;
+
+            let valid_direction = match direction {
+                FocusDirection::Left => dx < 0,
+                FocusDirection::Right => dx > 0,
+                FocusDirection::Up => dy < 0,
+                FocusDirection::Down => dy > 0,
+            };
+
+            if !valid_direction {
+                continue;
+            }
+
+            let distance = dx * dx + dy * dy;
+
+            if distance < best_distance {
+                best_distance = distance;
+                best_pane = Some(candidate.pane_id);
+            }
+        }
+
+        if let Some(pane_id) = best_pane {
+            self.focused_pane = pane_id;
+        }
+    }
+
+    pub fn focus_at_position(
+        &mut self,
+        mouse_x: f64,
+        mouse_y: f64,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    ) -> bool {
+        let rects = self.pane_rects(
+            x,
+            y,
+            width,
+            height,
+        );
+
+        for rect in rects {
+            let left = rect.x as f64;
+            let right = (rect.x + rect.width) as f64;
+            let top = rect.y as f64;
+            let bottom = (rect.y + rect.height) as f64;
+            let inside = 
+                mouse_x >= left
+                && mouse_x < right
+                && mouse_y >= top
+                && mouse_y < bottom;
+
+            if inside {
+                self.focused_pane = rect.pane_id;
+                return true;
+            }
+        }
+
+        false
     }
 }

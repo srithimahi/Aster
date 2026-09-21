@@ -9,7 +9,10 @@ mod mux;
 use config::{Config, parse_color};
 use theme::Theme;
 use mux::tab::Tab;
-use mux::layout::SplitDirection;
+use mux::layout::{
+    FocusDirection,
+    SplitDirection,
+};
 
 use std::{
     num::NonZeroU32,
@@ -23,7 +26,7 @@ use renderer::Renderer;
 use winit::{
     application::ApplicationHandler,
     dpi::LogicalSize,
-    event::{ElementState, MouseScrollDelta, WindowEvent},
+    event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent, },
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{Key, ModifiersState, NamedKey,},
     window::{Window, WindowId},
@@ -40,6 +43,9 @@ struct AsterApp {
     config: Config,
     theme: Theme,
     modifiers: ModifiersState,
+
+    mouse_x: f64,
+    mouse_y: f64,
 }
 
 impl AsterApp {
@@ -55,6 +61,9 @@ impl AsterApp {
             config,
             theme,
             modifiers: ModifiersState::empty(),
+
+            mouse_x: 0.0,
+            mouse_y: 0.0, 
         }
     }
 
@@ -301,6 +310,13 @@ impl ApplicationHandler for AsterApp {
 
                 let tab = &self.tabs[active_tab];
 
+                let pane_rects = tab.pane_rects(
+                    pane_x,
+                    pane_y,
+                    pane_width,
+                    pane_height,
+                );
+
                 let focused_pane_id = tab.focused_pane_id();
 
                 tab.for_each_pane(
@@ -342,6 +358,28 @@ impl ApplicationHandler for AsterApp {
                     }
                 );
 
+                tab.for_each_separator(
+                    pane_x,
+                    pane_y,
+                    pane_width,
+                    pane_height,
+                    &mut | 
+                        x,
+                        y,
+                        width,
+                        height,
+                    | {
+                        self.renderer 
+                            .draw_pane_separator(
+                                x,
+                                y,
+                                width,
+                                height,
+                                foreground,
+                            );
+                    },
+                );
+
                 let mut buffer = surface
                     .buffer_mut()
                     .expect("Failed to access window buffer");
@@ -353,6 +391,57 @@ impl ApplicationHandler for AsterApp {
                 buffer  
                     .present()
                     .expect("Failed to present frame")
+            }
+
+            WindowEvent::CursorMoved {
+                position,
+                ..
+            } => {
+                self.mouse_x = position.x;
+                self.mouse_y = position.y;
+            }
+
+            WindowEvent::MouseInput {
+                state,
+                button,
+                ..
+            } => {
+                if state != ElementState::Pressed {
+                    return;
+                }
+
+                if button != MouseButton::Left {
+                    return;
+                }
+
+                let size = window.inner_size();
+                let padding = self.config.window.padding;
+                let pane_x = padding;
+                let pane_y = TAB_BAR_HEIGHT + padding;
+                let pane_width = size.width.saturating_sub(
+                    padding.saturating_mul(2)
+                );
+
+                let pane_height = size.height
+                    .saturating_sub(TAB_BAR_HEIGHT)
+                    .saturating_sub(padding.saturating_mul(2));
+
+                let mouse_x = self.mouse_x;
+                let mouse_y = self.mouse_y;
+
+                let changed =
+                    self.active_tab_mut()
+                        .focus_at_position(
+                            mouse_x,
+                            mouse_y,
+                            pane_x,
+                            pane_y,
+                            pane_width,
+                            pane_height,
+                        );
+                if changed {
+                    window.request_redraw();
+                }
             }
 
             WindowEvent::MouseWheel { delta, ..} => {
@@ -424,30 +513,61 @@ impl ApplicationHandler for AsterApp {
                             window.request_redraw();
                             return;
                         }
+
+                        if character.eq_ignore_ascii_case("q") {
+                            self.active_tab_mut().close_active_pane();
+                            window.request_redraw();
+                            return;
+                        }
                     }
                 }
 
                 if control && shift {
-                    match &event.logical_key {
-                        Key::Named(NamedKey::ArrowRight) => {
-                            self.active_tab_mut()
-                                .focus_next_pane();
+                    let padding = self.config.window.padding;
 
-                            window.request_redraw();
-                            return;
-                        }
+                    let size = window.inner_size();
+                    let pane_x = padding;
+                    let pane_y = TAB_BAR_HEIGHT + padding;
+                    let pane_width =
+                        size.width.saturating_sub(
+                            padding.saturating_mul(2)
+                        );
+                    let pane_height = size.height 
+                        .saturating_sub(TAB_BAR_HEIGHT)
+                        .saturating_sub(padding.saturating_mul(2));
 
-                        Key::Named(
-                            NamedKey::ArrowLeft
-                        ) => {
-                            self.active_tab_mut()
-                                .focus_previous_pane();
-                            
-                            window.request_redraw();
-                            return;
-                        }
+                    let direction = 
+                        match &event.logical_key {
+                            Key::Named(
+                                NamedKey::ArrowLeft
+                            ) => Some(FocusDirection::Left),
 
-                        _ => {}
+                            Key::Named(
+                                NamedKey::ArrowRight
+                            ) => Some(FocusDirection::Right),
+
+                            Key::Named(
+                                NamedKey::ArrowUp
+                            ) => Some(FocusDirection::Up),
+
+                            Key::Named(
+                                NamedKey::ArrowDown
+                            ) => Some(FocusDirection::Down),
+
+                            _ => None,
+                        };
+
+                    if let Some(direction) = direction {
+                        self.active_tab_mut().focus_direction(
+                            direction,
+                            pane_x,
+                            pane_y,
+                            pane_width,
+                            pane_height,
+                        );
+
+                        window.request_redraw();
+                        return;
                     }
                 }
 

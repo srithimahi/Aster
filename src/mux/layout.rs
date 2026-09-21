@@ -6,6 +6,23 @@ pub enum SplitDirection {
     Vertical,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub enum FocusDirection {
+    Left,
+    Right,
+    Up,
+    Down,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct PaneRect {
+    pub pane_id: usize,
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
 pub enum PaneNode {
     Pane(Pane),
 
@@ -412,6 +429,219 @@ impl PaneNode {
             } => {
                 first.collect_pane_ids(ids);
                 second.collect_pane_ids(ids);
+            }
+        }
+    }
+
+    pub fn remove_pane(
+        &mut self,
+        pane_id: usize,
+    ) -> bool {
+        match self {
+            PaneNode::Pane(_) => false,
+            PaneNode::Split {
+                first,
+                second,
+                ..
+            } => {
+                let first_is_target = 
+                    matches!(
+                        first.as_ref(),
+                        PaneNode::Pane(pane)
+                            if pane.id() == pane_id
+                    );
+
+                if first_is_target {
+                    let replacement = 
+                        std::mem::replace(
+                            second.as_mut(),
+                            PaneNode::new_pane(1, 1),
+                        );
+
+                    *self = replacement;
+                    return true;
+                }
+
+                let second_is_target =
+                    matches!(
+                        second.as_ref(),
+                        PaneNode::Pane(pane)
+                            if pane.id() == pane_id
+                    );
+
+                if second_is_target {
+                    let replacement = 
+                        std::mem::replace(
+                            first.as_mut(),
+                            PaneNode::new_pane(1,1),
+                        );
+                    
+                    *self = replacement;
+                    return true;
+                }
+
+                if first.remove_pane(pane_id) {
+                    return true;
+                }
+
+                second.remove_pane(pane_id)
+            }
+        }
+    }
+
+    pub fn for_each_separator<F>(
+        &self,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        callback: &mut F,
+    )
+    where 
+     F: FnMut(
+        u32,
+        u32,
+        u32,
+        u32,
+     ),
+    {
+        match self {
+            PaneNode::Pane(_) => {}
+
+            PaneNode::Split {
+                direction,
+                ratio,
+                first,
+                second,
+            } => {
+                match direction {
+                    SplitDirection::Vertical => {
+                        let first_width = (width as f32 * *ratio) as u32;
+
+                        callback(
+                            x + first_width,
+                            y,
+                            1,
+                            height,
+                        );
+
+                        first.for_each_separator(
+                            x,
+                            y,
+                            first_width,
+                            height,
+                            callback,
+                        );
+
+                        second.for_each_separator(
+                            x + first_width,
+                            y,
+                            width.saturating_sub(first_width),
+                            height,
+                            callback,
+                        );
+                    }
+
+                    SplitDirection::Horizontal => {
+                        let first_height = (height as f32 * *ratio) as u32;
+                        callback(
+                            x, 
+                            y + first_height,
+                            width,
+                            1,
+                        );
+
+                        first.for_each_separator(
+                            x,
+                            y,
+                            width,
+                            first_height,
+                            callback,
+                        );
+
+                        second.for_each_separator(
+                            x,
+                            y+ first_height,
+                            width,
+                            height.saturating_sub(first_height),
+                            callback,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn collect_pane_rects(
+        &self,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        rects: &mut Vec<PaneRect>,
+    ) {
+        match self {
+            PaneNode::Pane(pane) => {
+                rects.push(
+                    PaneRect {
+                        pane_id: pane.id(),
+                        x,
+                        y,
+                        width,
+                        height,
+                    }
+                );
+            }
+
+            PaneNode::Split {
+                direction,
+                ratio,
+                first,
+                second,
+            } => {
+                match direction {
+                    SplitDirection::Vertical => {
+                        let first_width = (width as f32 * *ratio) as u32;
+                        let second_width = width.saturating_sub(first_width);
+
+                        first.collect_pane_rects(
+                            x,
+                            y,
+                            first_width,
+                            height,
+                            rects,
+                        );
+
+                        second.collect_pane_rects(
+                            x + first_width,
+                            y,
+                            second_width,
+                            height,
+                            rects,
+                        );
+                    }
+
+                    SplitDirection::Horizontal => {
+                        let first_height = (height as f32 * *ratio) as u32;
+                        let second_height = height.saturating_sub(first_height);
+
+                        first.collect_pane_rects(
+                            x,
+                            y,
+                            width,
+                            first_height,
+                            rects,
+                        );
+
+                        second.collect_pane_rects(
+                            x,
+                            y + first_height,
+                            width,
+                            second_height,
+                            rects,
+                        );
+                    }
+                }
             }
         }
     }

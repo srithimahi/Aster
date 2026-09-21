@@ -296,6 +296,27 @@ impl Renderer {
             color,
         );
     }
+
+    pub fn draw_pane_separator(
+        &mut self,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        color: u32,
+    ) {
+        if width == 0 || height == 0 {
+            return;
+        }
+
+        self.draw_rect(
+            x,
+            y,
+            width,
+            height,
+            color,
+        );
+    }
 }
 
 fn terminal_color(
