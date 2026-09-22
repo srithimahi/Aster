@@ -3,6 +3,7 @@ use super::{
         FocusDirection,
         PaneNode,
         PaneRect,
+        SeparatorRect,
         SplitDirection,
     },
     pane::Pane,
@@ -246,12 +247,7 @@ impl Tab {
         callback: &mut F,
     )
     where
-        F: FnMut(
-            u32,
-            u32,
-            u32,
-            u32,
-        ),
+        F: FnMut(SeparatorRect),
     {
         self.root.for_each_separator(
             x,
@@ -382,5 +378,95 @@ impl Tab {
         }
 
         false
+    }
+
+    pub fn separator_at_position(
+        &self,
+        mouse_x: f64,
+        mouse_y: f64,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    ) -> Option<SeparatorRect> {
+        let separators = self.root.separator_rects(
+            x,
+            y,
+            width,
+            height,
+        );
+
+        for separator in separators {
+            let hit_padding = 4.0;
+
+            let left = separator.x as f64 - hit_padding;
+            let right = (separator.x + separator.width) as f64 + hit_padding;
+            let top = separator.y as f64 - hit_padding;
+            let bottom = (separator.y + separator.height) as f64 + hit_padding;
+
+            let inside =
+                mouse_x >= left
+                && mouse_x < right
+                && mouse_y >= top
+                && mouse_y < bottom;
+
+            if inside {
+                return Some(separator);
+            }
+        }
+
+        None
+    }
+
+    pub fn resize_split_at_position(
+        &mut self,
+        split_id: usize,
+        mouse_x: f64,
+        mouse_y: f64,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    ) -> bool {
+        let Some(split) = self.root.find_split_rect(
+            split_id,
+            x,
+            y,
+            width,
+            height,
+        )
+
+        else {
+            return false;
+        };
+
+        let new_ratio = match split.direction {
+            SplitDirection::Vertical => {
+                if split.width == 0 {
+                    return false;
+                }
+
+                (
+                    (mouse_x - split.x as f64)
+                    / split.width as f64
+                ) as f32
+            }
+
+            SplitDirection::Horizontal => {
+                if split.height == 0 {
+                    return false;
+                }
+
+                (
+                    (mouse_y - split.y as f64)
+                    / split.height as f64
+                ) as f32
+            }
+        };
+
+        self.root.set_split_ratio(
+            split_id,
+            new_ratio,
+        )
     }
 }

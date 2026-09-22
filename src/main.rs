@@ -34,6 +34,11 @@ use winit::{
 
 const TAB_BAR_HEIGHT: u32 = 30;
 
+#[derive(Clone, Copy, Debug)]
+struct SplitDrag {
+    split_id: usize,
+}
+
 struct AsterApp {
     window: Option<Arc<Window>>,
     surface: Option<Surface<Arc<Window>, Arc<Window>>>,
@@ -43,6 +48,7 @@ struct AsterApp {
     config: Config,
     theme: Theme,
     modifiers: ModifiersState,
+    dragging_split: Option<SplitDrag>,
 
     mouse_x: f64,
     mouse_y: f64,
@@ -61,6 +67,7 @@ impl AsterApp {
             config,
             theme,
             modifiers: ModifiersState::empty(),
+            dragging_split: None,
 
             mouse_x: 0.0,
             mouse_y: 0.0, 
@@ -310,13 +317,6 @@ impl ApplicationHandler for AsterApp {
 
                 let tab = &self.tabs[active_tab];
 
-                let pane_rects = tab.pane_rects(
-                    pane_x,
-                    pane_y,
-                    pane_width,
-                    pane_height,
-                );
-
                 let focused_pane_id = tab.focused_pane_id();
 
                 tab.for_each_pane(
@@ -363,20 +363,14 @@ impl ApplicationHandler for AsterApp {
                     pane_y,
                     pane_width,
                     pane_height,
-                    &mut | 
-                        x,
-                        y,
-                        width,
-                        height,
-                    | {
-                        self.renderer 
-                            .draw_pane_separator(
-                                x,
-                                y,
-                                width,
-                                height,
-                                foreground,
-                            );
+                    &mut |separator| {
+                        self.renderer.draw_pane_separator(
+                            separator.x,
+                            separator.y,
+                            separator.width,
+                            separator.height,
+                            foreground,
+                        );
                     },
                 );
 
@@ -399,6 +393,52 @@ impl ApplicationHandler for AsterApp {
             } => {
                 self.mouse_x = position.x;
                 self.mouse_y = position.y;
+
+                let Some(drag) = self.dragging_split 
+                else {
+                    return;
+                };
+
+                let size = window.inner_size();
+                let padding = self.config.window.padding;
+
+                let pane_x = padding;
+                let pane_y = TAB_BAR_HEIGHT + padding;
+
+                let pane_width = size.width.saturating_sub(
+                    padding.saturating_mul(2)
+                );
+
+                let pane_height = size.height.saturating_sub(TAB_BAR_HEIGHT)
+                .saturating_sub(padding.saturating_mul(2));
+
+                let mouse_x = self.mouse_x;
+                let mouse_y = self.mouse_y;
+
+                let changed = self.active_tab_mut().resize_split_at_position(
+                    drag.split_id,
+                    mouse_x,
+                    mouse_y,
+                    pane_x,
+                    pane_y,
+                    pane_width,
+                    pane_height,
+                );
+
+                if changed {
+                    let cell_width = self.config.font.cell_width;
+                    let cell_height = self.config.font.cell_height;
+
+                    let columns = (pane_width / cell_width).max(1) as usize;
+                    let rows = (pane_height / cell_height).max(1) as usize;
+
+                    self.active_tab_mut().resize(
+                        columns,
+                        rows,
+                    );
+
+                    window.request_redraw();
+                }
             }
 
             WindowEvent::MouseInput {
@@ -406,39 +446,67 @@ impl ApplicationHandler for AsterApp {
                 button,
                 ..
             } => {
-                if state != ElementState::Pressed {
+                if button != MouseButton::Left {
                     return;
                 }
 
-                if button != MouseButton::Left {
+                if state == ElementState::Released {
+                    self.dragging_split = None;
                     return;
                 }
 
                 let size = window.inner_size();
                 let padding = self.config.window.padding;
+
                 let pane_x = padding;
                 let pane_y = TAB_BAR_HEIGHT + padding;
+
                 let pane_width = size.width.saturating_sub(
                     padding.saturating_mul(2)
                 );
 
-                let pane_height = size.height
-                    .saturating_sub(TAB_BAR_HEIGHT)
-                    .saturating_sub(padding.saturating_mul(2));
+                let pane_height = size.height.saturating_sub(TAB_BAR_HEIGHT)
+                .saturating_sub(
+                    padding.saturating_mul(2)
+                );
 
                 let mouse_x = self.mouse_x;
                 let mouse_y = self.mouse_y;
 
+                if let Some(separator) = self.active_tab().separator_at_position(
+                    mouse_x,
+                    mouse_y,
+                    pane_x,
+                    pane_y,
+                    pane_width,
+                    pane_height,
+                )
+
+                {
+                    self.dragging_split = Some(
+                        SplitDrag {
+                            split_id: separator.split_id,
+                        }
+                    );
+
+                    println!(
+                        "Started dragging split {}",
+                        separator.split_id,
+                    );
+
+                    return;
+                }
+
                 let changed =
-                    self.active_tab_mut()
-                        .focus_at_position(
-                            mouse_x,
-                            mouse_y,
-                            pane_x,
-                            pane_y,
-                            pane_width,
-                            pane_height,
-                        );
+                    self.active_tab_mut().focus_at_position(
+                        mouse_x,
+                        mouse_y,
+                        pane_x,
+                        pane_y,
+                        pane_width,
+                        pane_height,
+                    );
+
                 if changed {
                     window.request_redraw();
                 }

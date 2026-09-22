@@ -1,4 +1,11 @@
+use std::sync::atomic::{
+    AtomicUsize,
+    Ordering,
+};
+
 use super::pane::Pane;
+
+static NEXT_SPLIT_ID: AtomicUsize = AtomicUsize::new(1);
 
 #[derive(Clone, Copy, Debug)]
 pub enum SplitDirection {
@@ -23,10 +30,31 @@ pub struct PaneRect {
     pub height: u32,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct SeparatorRect {
+    pub split_id: usize,
+    pub direction: SplitDirection,
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct SplitRect {
+    pub split_id: usize,
+    pub direction: SplitDirection,
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
 pub enum PaneNode {
     Pane(Pane),
 
     Split {
+        id: usize,
         direction: SplitDirection,
         ratio: f32,
         first: Box<PaneNode>,
@@ -56,6 +84,8 @@ impl PaneNode {
             }
 
             PaneNode::Split {
+                direction,
+                ratio,
                 first,
                 second,
                 ..
@@ -85,6 +115,7 @@ impl PaneNode {
                 ratio,
                 first,
                 second,
+                ..
             } => {
                 match direction {
                     SplitDirection::Vertical => {
@@ -146,7 +177,10 @@ impl PaneNode {
             }
 
             PaneNode::Split {
+                direction,
+                ratio,
                 first,
+                second,
                 ..
             } => {
                 first.first_pane()
@@ -163,49 +197,15 @@ impl PaneNode {
             }
 
             PaneNode::Split {
+                direction,
+                ratio,
                 first,
+                second,
                 ..
             } => {
                 first.first_pane_mut()
             }
         }
-    }
-
-    pub fn split(
-        &mut self,
-        direction: SplitDirection,
-        columns: usize,
-        rows: usize,
-    ) {
-        let replacement = PaneNode::new_pane(
-            columns,
-            rows,
-        );
-
-        let original = std::mem::replace(
-            self,
-            replacement,
-        );
-
-        *self = PaneNode::Split {
-            direction,
-            ratio: 0.5,
-            first: Box::new(
-                original
-            ),
-
-            second: Box::new(
-                PaneNode::new_pane(
-                    columns,
-                    rows,
-                )
-            ),
-        };
-
-        self.resize(
-            columns,
-            rows,
-        );
     }
 
     pub fn for_each_pane<F>(
@@ -241,6 +241,7 @@ impl PaneNode {
                 ratio,
                 first,
                 second,
+                ..
             } => {
                 match direction {
                     SplitDirection::Vertical => {
@@ -304,6 +305,8 @@ impl PaneNode {
             }
 
             PaneNode::Split {
+                direction,
+                ratio,
                 first,
                 second,
                 ..
@@ -329,6 +332,8 @@ impl PaneNode {
             }
 
             PaneNode::Split {
+                direction,
+                ratio,
                 first,
                 second,
                 ..
@@ -356,23 +361,38 @@ impl PaneNode {
                     return None;
                 }
 
-                let new_pane = Pane::new(columns, rows);
-                let new_pane_id = new_pane.id();
-                let replacement = PaneNode::Pane(new_pane);
-                let original = std::mem::replace(
-                    self,
-                    replacement,
-                );
-
-                let second = std::mem::replace(
-                    self,
-                    PaneNode::new_pane(
+                let new_pane =
+                    Pane::new(
                         columns,
                         rows,
-                    ),
-                );
+                    );
+
+                let new_pane_id =
+                    new_pane.id();
+
+                let replacement =
+                    PaneNode::Pane(new_pane);
+
+                let original =
+                    std::mem::replace(
+                        self,
+                        replacement,
+                    );
+
+                let second =
+                    std::mem::replace(
+                        self,
+                        PaneNode::new_pane(
+                            columns,
+                            rows,
+                        ),
+                    );
 
                 *self = PaneNode::Split {
+                    id: NEXT_SPLIT_ID.fetch_add(
+                        1,
+                        Ordering::Relaxed,
+                    ),
                     direction,
                     ratio: 0.5,
                     first: Box::new(original),
@@ -392,7 +412,7 @@ impl PaneNode {
                 second,
                 ..
             } => {
-                if let Some(new_id) = 
+                if let Some(new_id) =
                     first.split_pane(
                         pane_id,
                         direction,
@@ -423,6 +443,8 @@ impl PaneNode {
             }
 
             PaneNode::Split {
+                direction,
+                ratio,
                 first,
                 second,
                 ..
@@ -440,6 +462,8 @@ impl PaneNode {
         match self {
             PaneNode::Pane(_) => false,
             PaneNode::Split {
+                direction,
+                ratio,
                 first,
                 second,
                 ..
@@ -497,18 +521,14 @@ impl PaneNode {
         height: u32,
         callback: &mut F,
     )
-    where 
-     F: FnMut(
-        u32,
-        u32,
-        u32,
-        u32,
-     ),
+    where
+        F: FnMut(SeparatorRect),
     {
         match self {
             PaneNode::Pane(_) => {}
 
             PaneNode::Split {
+                id,
                 direction,
                 ratio,
                 first,
@@ -516,13 +536,19 @@ impl PaneNode {
             } => {
                 match direction {
                     SplitDirection::Vertical => {
-                        let first_width = (width as f32 * *ratio) as u32;
+                        let first_width =
+                            (width as f32 * *ratio)
+                                as u32;
 
                         callback(
-                            x + first_width,
-                            y,
-                            1,
-                            height,
+                            SeparatorRect {
+                                split_id: *id,
+                                direction: *direction,
+                                x: x + first_width,
+                                y,
+                                width: 1,
+                                height,
+                            }
                         );
 
                         first.for_each_separator(
@@ -536,19 +562,28 @@ impl PaneNode {
                         second.for_each_separator(
                             x + first_width,
                             y,
-                            width.saturating_sub(first_width),
+                            width.saturating_sub(
+                                first_width
+                            ),
                             height,
                             callback,
                         );
                     }
 
                     SplitDirection::Horizontal => {
-                        let first_height = (height as f32 * *ratio) as u32;
+                        let first_height =
+                            (height as f32 * *ratio)
+                                as u32;
+
                         callback(
-                            x, 
-                            y + first_height,
-                            width,
-                            1,
+                            SeparatorRect {
+                                split_id: *id,
+                                direction: *direction,
+                                x,
+                                y: y + first_height,
+                                width,
+                                height: 1,
+                            }
                         );
 
                         first.for_each_separator(
@@ -561,15 +596,39 @@ impl PaneNode {
 
                         second.for_each_separator(
                             x,
-                            y+ first_height,
+                            y + first_height,
                             width,
-                            height.saturating_sub(first_height),
+                            height.saturating_sub(
+                                first_height
+                            ),
                             callback,
-                        )
+                        );
                     }
                 }
             }
         }
+    }
+
+    pub fn separator_rects(
+        &self,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    ) -> Vec<SeparatorRect> {
+        let mut separators = Vec::new();
+
+        self.for_each_separator(
+            x,
+            y,
+            width,
+            height,
+            &mut |separator| {
+                separators.push(separator);
+            },
+        );
+
+        separators
     }
 
     pub fn collect_pane_rects(
@@ -598,6 +657,7 @@ impl PaneNode {
                 ratio,
                 first,
                 second,
+                ..
             } => {
                 match direction {
                     SplitDirection::Vertical => {
@@ -640,6 +700,130 @@ impl PaneNode {
                             second_height,
                             rects,
                         );
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn set_split_ratio(
+        &mut self,
+        split_id: usize,
+        new_ratio: f32,
+    ) -> bool {
+        match self {
+            PaneNode::Pane(_) => false,
+
+            PaneNode::Split {
+                id,
+                ratio,
+                first,
+                second,
+                ..
+            } => {
+                if *id == split_id {
+                    *ratio = new_ratio.clamp(
+                        0.1,
+                        0.9,
+                    );
+
+                    return true;
+                }
+
+                if first.set_split_ratio(
+                    split_id,
+                    new_ratio, 
+                ) {
+                    return true;
+                }
+
+                second.set_split_ratio(
+                    split_id,
+                    new_ratio,
+                )
+            }
+        }
+    }
+
+    pub fn find_split_rect(
+        &self,
+        target_id: usize,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    ) -> Option<SplitRect> {
+        match self {
+            PaneNode::Pane(_) => None,
+            PaneNode::Split {
+                id,
+                direction,
+                ratio,
+                first,
+                second,
+            } => {
+                if *id == target_id {
+                    return Some(
+                        SplitRect {
+                            split_id: *id,
+                            direction: *direction,
+                            x,
+                            y,
+                            width,
+                            height,
+                        }
+                    );
+                }
+
+                match direction {
+                    SplitDirection::Vertical => {
+                        let first_width = (width as f32 * *ratio) as u32;
+
+                        if let Some(found) = first.find_split_rect(
+                            target_id,
+                            x,
+                            y,
+                            first_width,
+                            height,
+                        )
+                        {
+                            return Some(found);
+                        }
+
+                        second.find_split_rect(
+                            target_id,
+                            x + first_width,
+                            y,
+                            width.saturating_sub(first_width),
+                            height,
+                        )
+                    }
+
+                    SplitDirection::Horizontal => {
+                         let first_height =
+                            (height as f32 * *ratio) as u32;
+
+                        if let Some(found) =
+                            first.find_split_rect(
+                                target_id,
+                                x,
+                                y,
+                                width,
+                                first_height,
+                            )
+                        {
+                            return Some(found);
+                        }
+
+                        second.find_split_rect(
+                            target_id,
+                            x,
+                            y + first_height,
+                            width,
+                            height.saturating_sub(
+                                first_height
+                            ),
+                        )
                     }
                 }
             }
