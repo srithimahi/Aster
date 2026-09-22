@@ -14,6 +14,7 @@ use crate::terminal::Terminal;
 pub struct Tab {
     root: PaneNode,
     focused_pane: usize,
+    zoomed_pane: Option<usize>,
 }
 
 impl Tab {
@@ -33,6 +34,7 @@ impl Tab {
         Self {
             root,
             focused_pane,
+            zoomed_pane: None,
         }
     }
 
@@ -137,6 +139,46 @@ impl Tab {
             u32,
         ),
     {
+        self.root.for_each_pane(
+            x,
+            y,
+            width,
+            height,
+            callback,
+        );
+    }
+
+    pub fn for_each_visible_pane<F>(
+        &self,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        callback: &mut F,
+    )
+    where
+        F: FnMut(
+            &Pane,
+            u32,
+            u32,
+            u32,
+            u32,
+        ),
+    {
+        if let Some(pane_id) = self.zoomed_pane {
+            if let Some(pane) = self.root.find_pane(pane_id) {
+                callback(
+                    pane,
+                    x,
+                    y,
+                    width,
+                    height,
+                );
+            }
+
+            return;
+        }
+
         self.root.for_each_pane(
             x,
             y,
@@ -468,5 +510,19 @@ impl Tab {
             split_id,
             new_ratio,
         )
+    }
+
+    pub fn toggle_zoom(&mut self) {
+        if self.zoomed_pane.is_some() {
+            self.zoomed_pane = None;
+        } else {
+            self.zoomed_pane = Some(self.focused_pane);
+        }
+    }
+
+    pub fn zoomed_pane(
+        &self,
+    ) -> Option<usize> {
+        self.zoomed_pane
     }
 }

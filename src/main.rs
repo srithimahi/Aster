@@ -319,7 +319,7 @@ impl ApplicationHandler for AsterApp {
 
                 let focused_pane_id = tab.focused_pane_id();
 
-                tab.for_each_pane(
+                tab.for_each_visible_pane(
                     pane_x,
                     pane_y,
                     pane_width,
@@ -358,21 +358,23 @@ impl ApplicationHandler for AsterApp {
                     }
                 );
 
-                tab.for_each_separator(
-                    pane_x,
-                    pane_y,
-                    pane_width,
-                    pane_height,
-                    &mut |separator| {
-                        self.renderer.draw_pane_separator(
-                            separator.x,
-                            separator.y,
-                            separator.width,
-                            separator.height,
-                            foreground,
-                        );
-                    },
-                );
+                if tab.zoomed_pane().is_none() {
+                    tab.for_each_separator(
+                        pane_x,
+                        pane_y,
+                        pane_width,
+                        pane_height,
+                        &mut |separator| {
+                            self.renderer.draw_pane_separator(
+                                separator.x,
+                                separator.y,
+                                separator.width,
+                                separator.height,
+                                foreground,
+                            );
+                        },
+                    );
+                }
 
                 let mut buffer = surface
                     .buffer_mut()
@@ -584,6 +586,38 @@ impl ApplicationHandler for AsterApp {
 
                         if character.eq_ignore_ascii_case("q") {
                             self.active_tab_mut().close_active_pane();
+                            window.request_redraw();
+                            return;
+                        }
+
+                        if character.eq_ignore_ascii_case("z") {
+                            self.active_tab_mut().toggle_zoom();
+                            let size = window.inner_size();
+                            let padding = self.config.window.padding;
+
+                            let pane_width = size.width.saturating_sub(
+                                padding.saturating_mul(2)
+                            );
+
+                            let pane_height = size.height.saturating_sub(TAB_BAR_HEIGHT)
+                            .saturating_sub(padding.saturating_mul(2));
+
+                            let columns = (pane_width / self.config.font.cell_width).max(1) as usize;
+                            let rows = (pane_height / self.config.font.cell_height).max(1) as usize;
+
+                            if let Some(pane_id) = self.active_tab().zoomed_pane() {
+                                if let Some(pane) =
+                                    self.active_tab_mut().root_mut().find_pane_mut(pane_id)
+                                {
+                                    pane.resize(
+                                        columns,
+                                        rows,
+                                    );
+                                }
+                            } else {
+                                self.active_tab_mut().resize(columns, rows,);
+                            }
+
                             window.request_redraw();
                             return;
                         }
