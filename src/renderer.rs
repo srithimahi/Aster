@@ -136,16 +136,28 @@ impl Renderer {
                     palette,
                 );
 
-                if !matches!(
-                    cell.background(),
-                    TerminalColor::Default 
-                ) {
+                let is_selected =
+                    terminal.is_cell_selected(x, y);
+
+                let cell_background =
+                    if is_selected {
+                        cursor_color
+                    } else {
+                        background
+                    };
+
+                if is_selected
+                    || !matches!(
+                        cell.background(),
+                        TerminalColor::Default
+                    )
+                {
                     self.draw_rect(
                         pixel_x,
                         pixel_y,
                         cell_width,
                         cell_height,
-                        background,
+                        cell_background,
                     );
                 }
 

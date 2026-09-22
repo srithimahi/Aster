@@ -37,6 +37,18 @@ pub struct Cursor {
     y: usize,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct SelectionPoint {
+    pub x: usize,
+    pub y: usize,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Selection {
+    pub start: SelectionPoint,
+    pub end: SelectionPoint,
+}
+
 impl Cursor {
     fn new() -> Self {
         Self {
@@ -80,6 +92,7 @@ pub struct Terminal {
     scrollback: Vec<Vec<Cell>>,
     viewport_offset: usize,
     current_style: TextStyle,
+    selection: Option<Selection>,
 }
 
 impl Terminal {
@@ -107,6 +120,7 @@ impl Terminal {
             scrollback: Vec::new(),
             viewport_offset: 0,
             current_style: TextStyle::new(),
+            selection: None,
         }
     }
 
@@ -400,5 +414,109 @@ impl Terminal {
         self.viewport_offset = self.viewport_offset.min(
             self.scrollback.len()
         );
+    }
+
+    pub fn start_selection(
+        &mut self,
+        x: usize,
+        y: usize,
+    ) {
+        let x = x.min(self.width - 1);
+        let y = y.min(self.height - 1);
+
+        self.selection = Some(
+            Selection {
+                start: SelectionPoint {
+                    x,
+                    y,
+                },
+                end: SelectionPoint {
+                    x,
+                    y,
+                },
+            }
+        );
+    }
+
+    pub fn update_selection(
+        &mut self,
+        x: usize,
+        y: usize,
+    ) {
+        let x = x.min(self.width - 1);
+        let y = y.min(self.height - 1);
+
+        if let Some(selection) = &mut self.selection {
+            selection.end = SelectionPoint{x,y,};
+        }
+    }
+
+    pub fn clear_selection(&mut self) {
+        self.selection = None;
+    }
+
+    pub fn selection(
+        &self,
+    ) -> Option<Selection> {
+        self.selection
+    }
+
+    pub fn is_cell_selected(
+        &self,
+        x: usize,
+        y: usize,
+    ) -> bool {
+        let Some(selection) = self.selection
+        else {
+            return false;
+        };
+
+        let start_index = selection.start.y * self.width + selection.start.x;
+        let end_index = selection.end.y * self.width + selection.end.x;
+
+        let cell_index = y * self.width + x;
+
+        let (first, last) = 
+            if start_index <= end_index {
+                (start_index, end_index)
+            } else {
+                (end_index, start_index)
+            };
+
+        cell_index >= first && cell_index <= last
+    }
+
+    pub fn selected_text(&self) -> Option<String> {
+        let selection = self.selection?;
+        let start_index = selection.start.y * self.width + selection.start.x;
+        let end_index = selection.end.y * self.width + selection.end.x;
+
+        let (first, last) = 
+            if start_index <= end_index {
+                (start_index, end_index)
+            } else {
+                (end_index, start_index)
+            };
+
+        let mut text = String::new();
+
+        for index in first..=last {
+            let x = index % self.width;
+            let y = index / self.width;
+
+            if y >= self.height {
+                break;
+            }
+
+            let cell = self.visible_cell(x, y);
+
+            text.push(cell.character());
+
+            if x == self.width - 1 && index != last {
+                text.push('\n');
+            }
+        }
+
+        Some(text)
     }
 }

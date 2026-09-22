@@ -6,6 +6,7 @@ mod terminal;
 mod theme;
 mod mux;
 
+use arboard::Clipboard;
 use config::{Config, parse_color};
 use theme::Theme;
 use mux::tab::Tab;
@@ -49,6 +50,7 @@ struct AsterApp {
     theme: Theme,
     modifiers: ModifiersState,
     dragging_split: Option<SplitDrag>,
+    selecting_text: bool,
 
     mouse_x: f64,
     mouse_y: f64,
@@ -68,6 +70,7 @@ impl AsterApp {
             theme,
             modifiers: ModifiersState::empty(),
             dragging_split: None,
+            selecting_text: false,
 
             mouse_x: 0.0,
             mouse_y: 0.0, 
@@ -396,6 +399,48 @@ impl ApplicationHandler for AsterApp {
                 self.mouse_x = position.x;
                 self.mouse_y = position.y;
 
+                if self.selecting_text {
+                    let size = window.inner_size();
+                    let padding = self.config.window.padding;
+                    let pane_x = padding;
+                    let pane_y = TAB_BAR_HEIGHT + padding;
+
+                    let pane_width = size.width.saturating_sub(
+                        padding.saturating_mul(2)
+                    );
+
+                    let pane_height = size.height.saturating_sub(TAB_BAR_HEIGHT)
+                    .saturating_sub(padding.saturating_mul(2));
+
+                    if let Some(rect) = self.active_tab()
+                    .visible_pane_at_position(
+                        position.x,
+                        position.y,
+                        pane_x,
+                        pane_y,
+                        pane_width,
+                        pane_height,
+                    )
+
+                    {
+                        let local_x = position.x - rect.x as f64 - 2.0;
+                        let local_y = position.y - rect.y as f64 - 2.0;
+
+                        if local_x >= 0.0 && local_y >= 0.0 {
+                            let cell_x = (local_x / self.config.font.cell_width as f64) as usize;
+                            let cell_y = (local_y / self.config.font.cell_height as f64) as usize;
+
+                            self.active_tab_mut().terminal_mut().update_selection(
+                                cell_x,
+                                cell_y,
+                            );
+
+                            window.request_redraw();
+                        }
+                    }
+                    return;
+                }
+
                 let Some(drag) = self.dragging_split 
                 else {
                     return;
@@ -454,6 +499,7 @@ impl ApplicationHandler for AsterApp {
 
                 if state == ElementState::Released {
                     self.dragging_split = None;
+                    self.selecting_text = false;
                     return;
                 }
 
@@ -497,6 +543,48 @@ impl ApplicationHandler for AsterApp {
                     );
 
                     return;
+                }
+
+                if let Some(rect) = self.active_tab().visible_pane_at_position(
+                    mouse_x,
+                    mouse_y,
+                    pane_x,
+                    pane_y,
+                    pane_width,
+                    pane_height,
+                )
+
+                {
+                    let cell_width = self.config.font.cell_width;
+                    let cell_height = self.config.font.cell_height;
+
+                    let local_x = mouse_x - rect.x as f64 - 2.0;
+                    let local_y = mouse_y - rect.y as f64 - 2.0;
+
+                    if local_x >= 0.0 && local_y >= 0.0 {
+                        let cell_x = (local_x / cell_width as f64) as usize;
+                        let cell_y = (local_y / cell_height as f64) as usize;
+
+                        self.active_tab_mut().focus_at_position(
+                            mouse_x,
+                            mouse_y,
+                            pane_x,
+                            pane_y,
+                            pane_width,
+                            pane_height,
+                        );
+
+                        self.active_tab_mut()
+                            .terminal_mut()
+                            .start_selection(
+                                cell_x,
+                                cell_y,
+                            );
+
+                        self.selecting_text = true;
+                        window.request_redraw();
+                        return;
+                    }
                 }
 
                 let changed =
@@ -621,7 +709,27 @@ impl ApplicationHandler for AsterApp {
                             window.request_redraw();
                             return;
                         }
+
+                        if character.eq_ignore_ascii_case("c") {
+                            if let Some(text) = self.active_tab().terminal().selected_text()
+                            {
+                                if let Ok(mut clipboard) = Clipboard::new() {
+                                    let _ = clipboard.set_text(text);
+                                }
+                            }
+                            return;
+                        }
+
+                        if character.eq_ignore_ascii_case("v") {
+                            if let Ok(mut clipboard) = Clipboard::new() {
+                                if let Ok(text) = clipboard.get_text() {
+                                    self.active_tab_mut().write(&text);
+                                }
+                            }
+                            return;
+                        }
                     }
+
                 }
 
                 if control && shift {

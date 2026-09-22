@@ -10,3 +10,4 @@ softbuffer = "0.4.8"
 winit = "0.30.13"
 serde = { version = "1", features = ["derive"] }
 toml = "0.9"
+arboard = "3.6.1"

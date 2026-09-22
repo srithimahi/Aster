@@ -525,4 +525,45 @@ impl Tab {
     ) -> Option<usize> {
         self.zoomed_pane
     }
+
+    pub fn visible_pane_at_position(
+        &self,
+        mouse_x: f64,
+        mouse_y: f64,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+    ) -> Option<PaneRect> {
+        if let Some(pane_id) = self.zoomed_pane {
+            return Some(PaneRect {
+                pane_id,
+                x,
+                y,
+                width,
+                height,
+            });
+        }
+
+        let rects = 
+            self.pane_rects(
+                x,
+                y,
+                width,
+                height,
+            );
+        
+        for rect in rects {
+            let inside = 
+                mouse_x >= rect.x as f64
+                && mouse_x < (rect.x + rect.width) as f64
+                && mouse_y >= rect.y as f64
+                && mouse_y < (rect.y + rect.height) as f64;
+
+            if inside {
+                return Some(rect);
+            }
+        }
+        None
+    }
 }
