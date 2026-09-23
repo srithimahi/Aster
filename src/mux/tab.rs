@@ -9,12 +9,22 @@ use super::{
     pane::Pane,
 };
 
-use crate::terminal::Terminal;
+use crate::terminal::{
+    SearchMatch,
+    Terminal,
+};
+
+pub struct SearchState {
+    query: String,
+    matches: Vec<SearchMatch>,
+    current_match: usize,
+}
 
 pub struct Tab {
     root: PaneNode,
     focused_pane: usize,
     zoomed_pane: Option<usize>,
+    search: Option<SearchState>,
 }
 
 impl Tab {
@@ -35,6 +45,7 @@ impl Tab {
             root,
             focused_pane,
             zoomed_pane: None,
+            search: None,
         }
     }
 
@@ -565,5 +576,182 @@ impl Tab {
             }
         }
         None
+    }
+
+    pub fn start_search(
+        &mut self,
+    ) {
+        self.search = Some(
+            SearchState {
+                query: String::new(),
+                matches: Vec::new(),
+                current_match: 0,
+            }
+        );
+    }
+
+    pub fn close_search(
+        &mut self,
+    ) {
+        self.search = None;
+    }
+
+    pub fn is_searching(
+        &self,
+    ) -> bool {
+        self.search.is_some()
+    }
+
+    pub fn search_query(
+        &self,
+    ) -> Option<&str> {
+        self.search.as_ref().map(
+            |search| {
+                search.query.as_str()
+            }
+        )
+    }
+
+    pub fn current_search_match(
+        &self,
+    ) -> Option<SearchMatch> {
+        let search = self.search.as_ref()?;
+
+        if search.matches.is_empty() {
+            return None;
+        }
+
+        search.matches.get(
+            search.current_match
+        ).copied()
+    }
+
+    pub fn search_match_count(
+        &self,
+    ) -> usize {
+        self.search.as_ref().map(
+            |search| {
+                search.matches.len()
+            }
+        )
+        .unwrap_or(0)
+    }
+
+    pub fn current_search_number(
+        &self,
+    ) -> usize {
+        let Some(search) = &self.search 
+        else {
+            return 0;
+        };
+
+        if search.matches.is_empty() {
+            0
+        } else {
+            search.current_match + 1
+        }
+    }
+
+    fn refresh_search(
+        &mut self,
+    ) {
+        let query = match &self.search {
+            Some(search) => {
+                search.query.clone()
+            }
+
+            None => {
+                return;
+            }
+        };
+
+        let matches = 
+            if query.is_empty() {
+                Vec::new()
+            } else {
+                self.terminal().search(&query)
+            };
+
+        if let Some(search) = &mut self.search {
+            search.matches = matches;
+            search.current_match = 0;
+        }
+
+        self.reveal_current_search_match();
+    }
+
+    pub fn push_search_text(
+        &mut self,
+        text: &str,
+    ) {
+        let Some(search) = &mut self.search 
+        else {
+            return;
+        };
+
+        search.query.push_str(text);
+        self.refresh_search();
+    }
+
+    pub fn search_backspace(
+        &mut self,
+    ) {
+        let Some(search) = &mut self.search 
+        else {
+            return;
+        };
+
+        search.query.pop();
+        self.refresh_search();
+    }
+
+    pub fn next_search_match(
+        &mut self,
+    ) {
+        let Some(search) = &mut self.search 
+        else {
+            return;
+        };
+
+        if search.matches.is_empty() {
+            return;
+        }
+
+        search.current_match = (search.current_match + 1) % search.matches.len();
+        self.reveal_current_search_match();
+    }
+
+    pub fn previous_search_match(
+        &mut self,
+    ) {
+        let Some(search) = &mut self.search 
+        else {
+            return;
+        };
+
+        if search.matches.is_empty() {
+            return;
+        }
+
+        if search.current_match == 0 {
+            search.current_match = search.matches.len() - 1;
+        } else {
+            search.current_match -= 1;
+        }
+
+        self.reveal_current_search_match();
+    }
+
+    fn reveal_current_search_match(
+        &mut self,
+    ) {
+        let Some(found) = self.current_search_match()
+        else {
+            return;
+        };
+
+        self.terminal_mut().reveal_history_row(
+            found.start.y 
+        );
     }
 }

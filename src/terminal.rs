@@ -49,6 +49,12 @@ pub struct Selection {
     pub end: SelectionPoint,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct SearchMatch {
+    pub start: SelectionPoint,
+    pub end: SelectionPoint,
+}
+
 impl Cursor {
     fn new() -> Self {
         Self {
@@ -578,5 +584,125 @@ impl Terminal {
             }
         }
         Some(result)
+    }
+
+    fn history_row_text(
+        &self,
+        history_y: usize,
+    ) -> String {
+        let mut text = String::with_capacity(self.width);
+
+        for x in 0..self.width {
+            text.push(
+                self.history_cell(
+                    x,
+                    history_y,
+                ).character()
+            );
+        }
+        text
+    }
+
+    pub fn search(
+        &self,
+        query: &str,
+    ) -> Vec<SearchMatch> {
+        if query.is_empty() {
+            return Vec::new();
+        }
+
+        let mut matches = Vec::new();
+        let total_rows = self.scrollback.len() + self.height;
+
+        for history_y in 0..total_rows {
+            let row = self.history_row_text(history_y);
+            let mut search_from = 0;
+            while search_from < row.len() {
+                let Some(relative_index) = row[search_from..].find(query)
+                else {
+                    break;
+                };
+
+                let start_x = search_from + relative_index;
+                let end_x = start_x + query.len() - 1;
+
+                matches.push(
+                    SearchMatch {
+                        start: SelectionPoint {
+                            x: start_x,
+                            y: history_y,
+                        },
+                        end: SelectionPoint {
+                            x: end_x,
+                            y: history_y,
+                        },
+                    }
+                );
+
+                search_from = start_x + 1;
+            }
+        }
+
+        matches
+    }
+
+    pub fn is_cell_in_search_match(
+        &self,
+        x: usize,
+        y: usize,
+        search_match: &SearchMatch,
+    ) -> bool {
+        let history_y = self.visible_row_to_history_row(y);
+
+        if history_y < search_match.start.y || history_y > search_match.end.y {
+            return false;
+        }
+
+        if search_match.start.y == search_match.end.y {
+            return history_y == search_match.start.y 
+            && x >= search_match.start.x
+            && x <= search_match.end.x;
+        }
+
+        if history_y == search_match.start.y {
+            return x >= search_match.start.x;
+        }
+
+        if history_y == search_match.end.y {
+            return x <= search_match.end.x;
+        }
+
+        true
+    }
+
+    pub fn reveal_history_row(
+        &mut self,
+        history_y: usize,
+    ) {
+        let history_length = self.scrollback.len();
+        let total_rows = history_length + self.height;
+
+        if total_rows == 0 {
+            return;
+        }
+
+        let history_y = history_y.min(total_rows - 1);
+        let current_start = history_length.saturating_sub(
+            self.viewport_offset
+        );
+
+        let current_end = current_start + self.height.saturating_sub(1);
+        if history_y >= current_start && history_y <= current_end {
+            return;
+        }
+
+        let desired_screen_row = self.height / 2;
+        let desired_start = history_y.saturating_sub(
+            desired_screen_row
+        );
+
+        self.viewport_offset = history_length.saturating_sub(
+            desired_start
+        ).min(history_length);
     }
 }

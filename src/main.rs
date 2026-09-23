@@ -320,6 +320,8 @@ impl ApplicationHandler for AsterApp {
 
                 let tab = &self.tabs[active_tab];
 
+                let search_match = tab.current_search_match();
+
                 let focused_pane_id = tab.focused_pane_id();
 
                 tab.for_each_visible_pane(
@@ -357,6 +359,11 @@ impl ApplicationHandler for AsterApp {
                             background,
                             cursor,
                             &self.theme.palette,
+                            if pane.id() == focused_pane_id {
+                                search_match
+                            } else {
+                                None
+                            },
                         );
                     }
                 );
@@ -376,6 +383,26 @@ impl ApplicationHandler for AsterApp {
                                 foreground,
                             );
                         },
+                    );
+                }
+
+                if let Some(query) = tab.search_query() {
+                    let search_width = 360_u32.min(pane_width);
+                    let search_height = 28;
+                    let search_x = pane_x + pane_width.saturating_sub(search_width);
+                    let search_y = pane_y;
+
+                    self.renderer.draw_search_bar(
+                        query,
+                        tab.current_search_number(),
+                        tab.search_match_count(),
+                        search_x,
+                        search_y,
+                        search_width,
+                        search_height,
+                        14.0,
+                        foreground,
+                        background,
                     );
                 }
 
@@ -728,6 +755,12 @@ impl ApplicationHandler for AsterApp {
                             }
                             return;
                         }
+
+                        if character.eq_ignore_ascii_case("f") {
+                            self.active_tab_mut().start_search();
+                            window.request_redraw();
+                            return;
+                        }
                     }
                 }
 
@@ -796,6 +829,55 @@ impl ApplicationHandler for AsterApp {
                     self.next_tab();
                     window.request_redraw();
                     return;
+                }
+
+                if self.active_tab().is_searching() {
+                    match &event.logical_key {
+                        Key::Named(
+                            NamedKey::Escape
+                        ) => {
+                            self.active_tab_mut().close_search();
+                            window.request_redraw();
+                            return;
+                        }
+
+                        Key::Named(
+                            NamedKey::Backspace
+                        ) => {
+                            self.active_tab_mut().search_backspace();
+                            window.request_redraw();
+                            return;
+                        }
+
+                        Key::Named(
+                            NamedKey::Enter
+                        ) => {
+                            if self.modifiers.shift_key() {
+                                self.active_tab_mut().previous_search_match();
+                            } else {
+                                self.active_tab_mut().next_search_match();
+                            }
+
+                            window.request_redraw();
+                            return;
+                        }
+
+                        Key::Character(
+                            character
+                        ) => {
+                            if !self.modifiers.control_key()
+                             && !self.modifiers.alt_key() {
+                                self.active_tab_mut().push_search_text(character);
+                                window.request_redraw();
+                            }
+
+                            return;
+                        }
+
+                        _ => {
+                            return;
+                        }
+                    }
                 }
                 
                 match &event.logical_key {

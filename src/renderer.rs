@@ -1,4 +1,9 @@
-use crate::terminal::{Terminal, TerminalColor};
+use crate::terminal::{
+    SearchMatch,
+    Terminal,
+    TerminalColor,
+};
+
 use crate::theme::ThemePalette;
 use fontdue::{Font, FontSettings};
 
@@ -121,6 +126,7 @@ impl Renderer {
         default_background: u32,
         cursor_color: u32,
         palette: &ThemePalette,
+        search_match: Option<SearchMatch>,
     ) {
         for y in 0..terminal.height() {
             for x in 0..terminal.width() {
@@ -139,14 +145,27 @@ impl Renderer {
                 let is_selected =
                     terminal.is_cell_selected(x, y);
 
-                let cell_background =
-                    if is_selected {
+                let is_search_match = search_match.as_ref().map(
+                    |found| {
+                        terminal.is_cell_in_search_match(
+                            x,
+                            y,
+                            found,
+                        )
+                    }
+                ).unwrap_or(false);
+
+                let cell_background = 
+                    if is_search_match {
+                        cursor_color
+                    } else if is_selected {
                         cursor_color
                     } else {
                         background
                     };
 
                 if is_selected
+                    || is_search_match
                     || !matches!(
                         cell.background(),
                         TerminalColor::Default
@@ -327,6 +346,51 @@ impl Renderer {
             width,
             height,
             color,
+        );
+    }
+
+    pub fn draw_search_bar(
+        &mut self,
+        query: &str,
+        current: usize,
+        total: usize,
+        x: u32,
+        y: u32,
+        width: u32,
+        height: u32,
+        font_size: f32,
+        foreground: u32,
+        background: u32,
+    ) {
+        self.draw_rect(
+            x,
+            y,
+            width,
+            height,
+            background,
+        );
+
+        let label = 
+            if total == 0 {
+                format!(
+                    "Search: {}   0 / 0",
+                    query,
+                )
+            } else {
+                format!(
+                    "Search: {}    {} / {}",
+                    query,
+                    current,
+                    total,
+                )
+            };
+
+        self.draw_text(
+            &label,
+            x + 8,
+            y + 4,
+            font_size,
+            foreground,
         );
     }
 }
