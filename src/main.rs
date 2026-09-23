@@ -729,7 +729,6 @@ impl ApplicationHandler for AsterApp {
                             return;
                         }
                     }
-
                 }
 
                 if control && shift {

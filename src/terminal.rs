@@ -338,6 +338,34 @@ impl Terminal {
         }
     }
 
+    fn visible_row_to_history_row(
+        &self,
+        y: usize,
+    ) -> usize {
+        let viewport_start = self.scrollback
+        .len()
+        .saturating_sub(
+            self.viewport_offset
+        );
+
+        viewport_start + y
+    }
+
+    fn history_cell(
+        &self,
+        x: usize,
+        history_y: usize,
+    ) -> &Cell {
+        let history_length = self.scrollback.len();
+
+        if history_y < history_length {
+            &self.scrollback[history_y][x]
+        } else {
+            let screen_y = history_y - history_length;
+            self.cell(x, screen_y,)
+        }
+    }
+
     pub fn visible_cell(&self, x: usize, y: usize) -> &Cell {
         if self.viewport_offset == 0 {
             return self.cell(x,y);
@@ -391,6 +419,13 @@ impl Terminal {
             return;
         }
 
+        for row in &mut self.scrollback {
+            row.resize(
+                new_width,
+                Cell::empty(),
+            );
+        }
+
         let mut new_cells = vec![Cell::empty(); new_width * new_height];
         let copy_width = self.width.min(new_width);
         let copy_height = self.height.min(new_height);
@@ -422,17 +457,18 @@ impl Terminal {
         y: usize,
     ) {
         let x = x.min(self.width - 1);
-        let y = y.min(self.height - 1);
+        let visible_y = y.min(self.height - 1);
 
+        let history_y = self.visible_row_to_history_row(visible_y);
         self.selection = Some(
             Selection {
                 start: SelectionPoint {
                     x,
-                    y,
+                    y: history_y,
                 },
                 end: SelectionPoint {
                     x,
-                    y,
+                    y: history_y,
                 },
             }
         );
@@ -444,10 +480,16 @@ impl Terminal {
         y: usize,
     ) {
         let x = x.min(self.width - 1);
-        let y = y.min(self.height - 1);
+        let visible_y = y.min(self.height - 1);
+        let history_y = self.visible_row_to_history_row(
+            visible_y
+        );
 
         if let Some(selection) = &mut self.selection {
-            selection.end = SelectionPoint{x,y,};
+            selection.end = SelectionPoint {
+                x,
+                y: history_y,
+            };
         }
     }
 
@@ -464,17 +506,18 @@ impl Terminal {
     pub fn is_cell_selected(
         &self,
         x: usize,
-        y: usize,
+        y: usize, 
     ) -> bool {
         let Some(selection) = self.selection
         else {
             return false;
         };
 
+        let history_y = self.visible_row_to_history_row(y);
         let start_index = selection.start.y * self.width + selection.start.x;
         let end_index = selection.end.y * self.width + selection.end.x;
 
-        let cell_index = y * self.width + x;
+        let cell_index = history_y * self.width + x;
 
         let (first, last) = 
             if start_index <= end_index {
@@ -491,32 +534,49 @@ impl Terminal {
         let start_index = selection.start.y * self.width + selection.start.x;
         let end_index = selection.end.y * self.width + selection.end.x;
 
-        let (first, last) = 
+        let(first, last) =
             if start_index <= end_index {
                 (start_index, end_index)
             } else {
                 (end_index, start_index)
             };
 
-        let mut text = String::new();
+        let first_y = first / self.width;
+        let last_y = last / self.width;
 
-        for index in first..=last {
-            let x = index % self.width;
-            let y = index / self.width;
+        let mut result = String::new();
 
-            if y >= self.height {
-                break;
+        for y in first_y..=last_y {
+            let row_start_x = if y == first_y {
+                first % self.width 
+            } else {
+                0
+            };
+
+            let row_end_x =
+                if y == last_y {
+                    last % self.width
+                } else {
+                    self.width - 1
+                };
+
+            let mut line = String::new();
+
+            for x in row_start_x..=row_end_x {
+                line.push(
+                    self.history_cell(x, y).character()
+                );
             }
 
-            let cell = self.visible_cell(x, y);
+            while line.ends_with(' ') {
+                line.pop();
+            }
 
-            text.push(cell.character());
-
-            if x == self.width - 1 && index != last {
-                text.push('\n');
+            result.push_str(&line);
+            if y != last_y {
+                result.push('\n');
             }
         }
-
-        Some(text)
+        Some(result)
     }
 }
