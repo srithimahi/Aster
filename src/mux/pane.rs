@@ -4,7 +4,10 @@ use std::sync::atomic::{
 };
 
 use crate::{
-    parser::AnsiParser,
+    parser::{
+        AnsiParser,
+        ParserEvent,
+    },
     pty::PtySession,
     terminal::Terminal,
 };
@@ -14,6 +17,7 @@ static NEXT_PANE_ID: AtomicUsize =
 
 pub struct Pane {
     id: usize,
+    title: String,
     terminal: Terminal,
     pty: PtySession,
     parser: AnsiParser,
@@ -30,6 +34,10 @@ impl Pane {
                 Ordering::Relaxed,
             ),
 
+            title: String::from(
+                "PowerShell"
+            ),
+
             terminal: Terminal::new(
                 columns,
                 rows,
@@ -42,6 +50,30 @@ impl Pane {
 
     pub fn id(&self) -> usize {
         self.id
+    }
+
+    pub fn title(
+        &self,
+    ) -> &str {
+        &self.title
+    }
+
+    fn handle_parser_event(
+        &mut self,
+        event: ParserEvent,
+    ) {
+        match event {
+            ParserEvent::SetTitle(
+                title
+            ) => {
+                self.title = title;
+                println!(
+                    "Pane {} title changed to: {}",
+                    self.id,
+                    self.title,
+                );
+            }
+        }
     }
 
     pub fn terminal(&self) -> &Terminal {
@@ -81,27 +113,23 @@ impl Pane {
         &mut self,
     ) -> bool {
         let mut received_output = false;
-
-        while let Some(output) =
-            self.pty.try_read()
-        {
-
+        while let Some(output) = self.pty.try_read() {
             for byte in output.bytes() {
-                if let Some(response) =
-                    self.parser.process_byte(
-                        byte,
-                        &mut self.terminal,
-                    )
-                {
-                    self.pty.write(
-                        &response
-                    );
+                let parser_output = self.parser.process_byte(
+                    byte,
+                    &mut self.terminal,
+                );
+
+                if let Some(response) = parser_output.response {
+                    self.pty.write(&response);
+                }
+
+                if let Some(event) = parser_output.event {
+                    self.handle_parser_event(event);
                 }
             }
-
             received_output = true;
         }
-
         received_output
     }
 }

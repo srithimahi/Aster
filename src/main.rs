@@ -293,8 +293,19 @@ impl ApplicationHandler for AsterApp {
                 
                 self.renderer.clear(background);
 
+                let tab_titles: Vec<String> =
+                    self.tabs
+                        .iter()
+                        .map(
+                            |tab| {
+                                tab.title()
+                                    .to_string()
+                            }
+                        )
+                        .collect();
+
                 self.renderer.draw_tab_bar(
-                    self.tabs.len(),
+                    &tab_titles,
                     self.active_tab,
                     TAB_BAR_HEIGHT,
                     14.0,

@@ -265,7 +265,7 @@ impl Renderer {
 
     pub fn draw_tab_bar(
         &mut self,
-        tab_count: usize,
+        titles: &[String],
         active_tab: usize,
         height: u32,
         font_size: f32,
@@ -282,7 +282,7 @@ impl Renderer {
         );
 
         let tab_width = 140;
-        for index in 0..tab_count {
+        for (index, title,) in titles.iter().enumerate() {
             let x = index as u32 * tab_width;
             if index == active_tab {
                 self.draw_rect(
@@ -294,7 +294,12 @@ impl Renderer {
                 );
             }
 
-            let label = format!("Tab {}", index + 1);
+            let max_characters = 14;
+            let label: String =
+                title
+                    .chars()
+                    .take(max_characters)
+                    .collect();
             self.draw_text(
                 &label,
                 x + 12,

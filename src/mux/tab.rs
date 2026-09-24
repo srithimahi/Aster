@@ -768,4 +768,10 @@ impl Tab {
             }
         }
     }
+
+    pub fn title(
+        &self,
+    ) -> &str {
+        self.active_pane().title()
+    }
 }

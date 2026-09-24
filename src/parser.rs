@@ -8,6 +8,44 @@ enum ParserState {
     Osc,
 }
 
+#[derive(Clone, Debug)]
+pub enum ParserEvent {
+    SetTitle(String),
+}
+
+#[derive(Debug)]
+pub struct ParserOutput {
+    pub response: Option<String>,
+    pub event: Option<ParserEvent>,
+}
+
+impl ParserOutput {
+    fn none() -> Self {
+        Self {
+            response: None,
+            event: None,
+        }
+    }
+
+    fn response(
+        response: String,
+    ) -> Self {
+        Self {
+            response: Some(response),
+            event: None,
+        }
+    }
+
+    fn event(
+        event: ParserEvent,
+    ) -> Self {
+        Self {
+            response: None,
+            event: Some(event),
+        }
+    }
+}
+
 pub struct AnsiParser {
     state: ParserState,
     parameters: String,
@@ -51,25 +89,51 @@ impl AnsiParser {
         &mut self,
         byte: u8,
         terminal: &mut Terminal,
-    ) -> Option<String> {
+    ) -> ParserOutput {
         match self.state {
             ParserState::Ground => {
-                self.process_ground(byte, terminal);
-                None
+                self.process_ground(
+                    byte,
+                    terminal,
+                );
+
+                ParserOutput::none()
             }
 
             ParserState::Escape => {
                 self.process_escape(byte);
-                None
+                ParserOutput::none()
             }
 
             ParserState::Csi => {
-                self.process_csi(byte, terminal)
+                match self.process_csi(
+                    byte,
+                    terminal,
+                ) {
+                    Some(response) => {
+                        ParserOutput::response(
+                            response
+                        )
+                    }
+
+                    None => {
+                        ParserOutput::none()
+                    }
+                }
             }
 
             ParserState::Osc => {
-                self.process_osc(byte);
-                None
+                match self.process_osc(byte) {
+                    Some(event) => {
+                        ParserOutput::event(
+                            event
+                        )
+                    }
+
+                    None => {
+                        ParserOutput::none()
+                    }
+                }
             }
         }
     }
@@ -226,17 +290,50 @@ impl AnsiParser {
         response
     }
 
-    fn process_osc(&mut self, byte: u8) {
+    fn process_osc(
+        &mut self,
+        byte: u8,
+    ) -> Option<ParserEvent> {
         match byte {
             0x07 => {
-                println!("OSC: {}", self.osc_data);
+                let event = self.finish_osc();
                 self.osc_data.clear();
                 self.state = ParserState::Ground;
+                event
             }
 
             _ => {
-                self.osc_data.push(byte as char);
-            } 
+                self.osc_data.push(
+                    byte as char
+                );
+
+                None
+            }
+        }
+    }
+
+    fn finish_osc(
+        &self,
+    ) -> Option<ParserEvent> {
+        let(
+            command,
+            value,
+        ) = self.osc_data.split_once(';')?;
+
+        match command {
+            "0" | "2" => {
+                if value.is_empty() {
+                    None
+                } else {
+                    Some(
+                        ParserEvent::SetTitle(
+                            value.to_string()
+                        )
+                    )
+                }
+            }
+
+            _ => None,
         }
     }
 
