@@ -282,7 +282,7 @@ impl Renderer {
             background,
         );
 
-        for (index, title,) in titles.iter().enumerate() {
+        for (index, title) in titles.iter().enumerate() {
             let x = index as u32 * tab_width;
             if index == active_tab {
                 self.draw_rect(
@@ -294,12 +294,12 @@ impl Renderer {
                 );
             }
 
-            let max_characters = 14;
-            let label: String =
-                title
-                    .chars()
-                    .take(max_characters)
-                    .collect();
+            let max_characters = 11;
+            let label: String = title
+                .chars()
+                .take(max_characters)
+                .collect();
+
             self.draw_text(
                 &label,
                 x + 12,
@@ -307,7 +307,32 @@ impl Renderer {
                 font_size,
                 foreground,
             );
+
+            self.draw_text(
+                "x",
+                x + tab_width - 24,
+                5,
+                font_size,
+                foreground,
+            );
         }
+
+        let new_tab_x = titles.len() as u32 * tab_width;
+        self.draw_rect(
+            new_tab_x,
+            0,
+            42,
+            height,
+            background,
+        );
+
+        self.draw_text(
+            "+",
+            new_tab_x + 14,
+            5,
+            font_size,
+            foreground,
+        );
     }
 
     pub fn draw_pane_border(

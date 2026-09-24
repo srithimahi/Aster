@@ -36,6 +36,9 @@ use winit::{
 const TAB_BAR_HEIGHT: u32 = 30;
 const TAB_WIDTH: u32 = 140;
 
+const TAB_CLOSE_WIDTH: u32 = 28;
+const NEW_TAB_BUTTON_WIDTH: u32 = 42;
+
 #[derive(Clone, Copy, Debug)]
 struct SplitDrag {
     split_id: usize,
@@ -127,22 +130,25 @@ impl AsterApp {
     }
 
     fn close_active_tab(&mut self) {
+        let index = self.active_tab;
+        self.close_tab(index);
+    }
+
+    fn close_tab(&mut self, index: usize) {
         if self.tabs.len() <= 1 {
-            println!("Cannor close the last tabbie");
             return;
         }
 
-        let closed_tab = self.active_tab;
-        self.tabs.remove(closed_tab);
-        if self.active_tab >= self.tabs.len() {
-            self.active_tab = self.tabs.len() - 1;
+        if index >= self.tabs.len() {
+            return;
         }
 
-        println!(
-            "Closed tabbie {}. Active tabbie is now {}",
-            closed_tab + 1,
-            self.active_tab + 1,
-        );
+        self.tabs.remove(index);
+        if self.active_tab > index {
+            self.active_tab -= 1;
+        } else if self.active_tab >= self.tabs.len() {
+            self.active_tab = self.tabs.len() - 1;
+        }
     }
 }
 
@@ -554,11 +560,39 @@ impl ApplicationHandler for AsterApp {
                 }
 
                 if self.mouse_y >= 0.0 && self.mouse_y < TAB_BAR_HEIGHT as f64 {
-                    let clicked_tab = (self.mouse_x / TAB_WIDTH as f64) as usize;
-                    if clicked_tab < self.tabs.len() {
-                        self.active_tab = clicked_tab;
-                        println!("Clicked tabbie {}", clicked_tab + 1,);
+                    let tabs_end = self.tabs.len() as f64 * TAB_WIDTH as f64;
+                    let new_tab_end = tabs_end + NEW_TAB_BUTTON_WIDTH as f64;
+
+                    if self.mouse_x >= tabs_end && self.mouse_x < new_tab_end {
+                        self.new_tab();
                         window.request_redraw();
+                        return;
+                    }
+
+                    if self.mouse_x >= 0.0 && self.mouse_x < tabs_end {
+                        let clicked_tab = (self.mouse_x / TAB_WIDTH as f64) as usize;
+                        let position_inside_tab = self.mouse_x - clicked_tab as f64
+                        * TAB_WIDTH as f64;
+
+                        let close_button_start = TAB_WIDTH as f64 - TAB_CLOSE_WIDTH as f64;
+
+                        if position_inside_tab >= close_button_start {
+                            println!(
+                                "Closing tab {}",
+                                clicked_tab + 1,
+                            );
+
+                            self.close_tab(clicked_tab);
+                        } else {
+                            println!(
+                                "Activating tab {}",
+                                clicked_tab + 1,
+                            );
+
+                            self.active_tab = clicked_tab;
+                        }
+                        window.request_redraw();
+                        return;
                     }
                     return;
                 }
