@@ -267,6 +267,7 @@ impl Renderer {
         &mut self,
         titles: &[String],
         active_tab: usize,
+        tab_width: u32,
         height: u32,
         font_size: f32,
         foreground: u32,
@@ -281,7 +282,6 @@ impl Renderer {
             background,
         );
 
-        let tab_width = 140;
         for (index, title,) in titles.iter().enumerate() {
             let x = index as u32 * tab_width;
             if index == active_tab {

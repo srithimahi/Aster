@@ -34,6 +34,7 @@ use winit::{
 };
 
 const TAB_BAR_HEIGHT: u32 = 30;
+const TAB_WIDTH: u32 = 140;
 
 #[derive(Clone, Copy, Debug)]
 struct SplitDrag {
@@ -307,10 +308,11 @@ impl ApplicationHandler for AsterApp {
                 self.renderer.draw_tab_bar(
                     &tab_titles,
                     self.active_tab,
+                    TAB_WIDTH,
                     TAB_BAR_HEIGHT,
                     14.0,
                     foreground,
-                    background,
+                    background, 
                     cursor,
                 );
 
@@ -548,6 +550,16 @@ impl ApplicationHandler for AsterApp {
                 if state == ElementState::Released {
                     self.dragging_split = None;
                     self.selecting_text = false;
+                    return;
+                }
+
+                if self.mouse_y >= 0.0 && self.mouse_y < TAB_BAR_HEIGHT as f64 {
+                    let clicked_tab = (self.mouse_x / TAB_WIDTH as f64) as usize;
+                    if clicked_tab < self.tabs.len() {
+                        self.active_tab = clicked_tab;
+                        println!("Clicked tabbie {}", clicked_tab + 1,);
+                        window.request_redraw();
+                    }
                     return;
                 }
 
