@@ -344,7 +344,7 @@ impl Terminal {
         }
     }
 
-    fn visible_row_to_history_row(
+    pub fn visible_row_to_history_row(
         &self,
         y: usize,
     ) -> usize {
@@ -611,35 +611,47 @@ impl Terminal {
             return Vec::new();
         }
 
-        let mut matches = Vec::new();
-        let total_rows = self.scrollback.len() + self.height;
+        let query_chars: Vec<char> = query
+            .to_lowercase()
+            .chars()
+            .collect();
 
+        if query_chars.is_empty() {
+            return Vec::new();
+        }
+
+        let total_rows = self.scrollback.len() + self.height;
+        let mut matches = Vec::new();
         for history_y in 0..total_rows {
             let row = self.history_row_text(history_y);
-            let mut search_from = 0;
-            while search_from < row.len() {
-                let Some(relative_index) = row[search_from..].find(query)
-                else {
-                    break;
-                };
+            let row_chars: Vec<char> = row
+                .to_lowercase()
+                .chars()
+                .collect();
+            
+            if query_chars.len() > row_chars.len() {
+                continue;
+            }
 
-                let start_x = search_from + relative_index;
-                let end_x = start_x + query.len() - 1;
+            let last_start = row_chars.len() - query_chars.len();
 
-                matches.push(
-                    SearchMatch {
-                        start: SelectionPoint {
-                            x: start_x,
-                            y: history_y,
-                        },
-                        end: SelectionPoint {
-                            x: end_x,
-                            y: history_y,
-                        },
-                    }
-                );
+            for start_x in 0..=last_start {
+                let end = start_x + query_chars.len();
+                if row_chars[start_x..end] == query_chars[..] {
+                    matches.push(
+                        SearchMatch {
+                            start: SelectionPoint {
+                                x: start_x,
+                                y: history_y,
+                            },
 
-                search_from = start_x + 1;
+                            end: SelectionPoint {
+                                x: end - 1,
+                                y: history_y,
+                            },
+                        }
+                    );
+                }
             }
         }
 

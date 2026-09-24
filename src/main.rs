@@ -320,7 +320,11 @@ impl ApplicationHandler for AsterApp {
 
                 let tab = &self.tabs[active_tab];
 
-                let search_match = tab.current_search_match();
+                let search_matches = tab.search_matches();
+
+                let current_search_match = tab.current_search_match();
+
+                let focused_pane_id = tab.focused_pane_id();
 
                 let focused_pane_id = tab.focused_pane_id();
 
@@ -360,7 +364,13 @@ impl ApplicationHandler for AsterApp {
                             cursor,
                             &self.theme.palette,
                             if pane.id() == focused_pane_id {
-                                search_match
+                                search_matches
+                            } else {
+                                &[]
+                            },
+
+                            if pane.id() == focused_pane_id {
+                                current_search_match
                             } else {
                                 None
                             },

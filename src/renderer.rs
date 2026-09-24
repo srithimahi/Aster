@@ -126,7 +126,8 @@ impl Renderer {
         default_background: u32,
         cursor_color: u32,
         palette: &ThemePalette,
-        search_match: Option<SearchMatch>,
+        search_matches: &[SearchMatch],
+        current_search_match: Option<SearchMatch>,
     ) {
         for y in 0..terminal.height() {
             for x in 0..terminal.width() {
@@ -145,31 +146,54 @@ impl Renderer {
                 let is_selected =
                     terminal.is_cell_selected(x, y);
 
-                let is_search_match = search_match.as_ref().map(
-                    |found| {
-                        terminal.is_cell_in_search_match(
-                            x,
-                            y,
-                            found,
-                        )
-                    }
-                ).unwrap_or(false);
+                let is_search_match = search_matches
+                    .iter()
+                    .any(
+                        |found| {
+                            terminal.is_cell_in_search_match(
+                                x,
+                                y,
+                                found,
+                            )
+                        }
+                    );
 
-                let cell_background = 
-                    if is_search_match {
+                let is_current_search_match = current_search_match
+                    .as_ref()
+                    .map(
+                        |found| {
+                            terminal.is_cell_in_search_match(
+                                x,
+                                y,
+                                found,
+                            )
+                        }
+                    ).unwrap_or(false);
+
+                let search_color = blend_color(
+                    background,
+                    cursor_color,
+                    90,
+                );
+
+                let cell_background =
+                    if is_current_search_match {
                         cursor_color
+                    } else if is_search_match {
+                        search_color
                     } else if is_selected {
                         cursor_color
                     } else {
                         background
                     };
 
-                if is_selected
+                if is_selected 
                     || is_search_match
+                    || is_current_search_match
                     || !matches!(
                         cell.background(),
                         TerminalColor::Default
-                    )
+                    ) 
                 {
                     self.draw_rect(
                         pixel_x,

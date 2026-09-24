@@ -754,4 +754,18 @@ impl Tab {
             found.start.y 
         );
     }
+
+    pub fn search_matches(
+        &self,
+    ) -> &[SearchMatch] {
+        match &self.search {
+            Some(search) => {
+                &search.matches
+            }
+
+            None => {
+                &[]
+            }
+        }
+    }
 }
