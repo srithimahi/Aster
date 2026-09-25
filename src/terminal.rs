@@ -310,6 +310,25 @@ impl Terminal {
         }
     }
 
+    pub fn erase_characters(&mut self, count: usize) {
+        let count = count.max(1);
+        for offset in 0..count {
+            let x = self.cursor.x + offset;
+            if x >= self.width {
+                break;
+            }
+
+            let index = self.cursor.y * self.width + x;
+            self.cells[index] = Cell {
+                character: ' ',
+                foreground: TerminalColor::Default,
+                background: TerminalColor::Default,
+                bold: false,
+                underline: false, 
+            };
+        }
+    }
+
     pub fn erase_display(&mut self, mode: usize) {
         match mode {
             0 => {

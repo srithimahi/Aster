@@ -2,10 +2,11 @@ use crate::terminal::{Terminal, TerminalColor};
 
 #[derive(Debug)]
 enum ParserState {
-    Ground, 
+    Ground,
     Escape,
     Csi,
     Osc,
+    OscEscape,
 }
 
 #[derive(Clone, Debug)]
@@ -92,11 +93,7 @@ impl AnsiParser {
     ) -> ParserOutput {
         match self.state {
             ParserState::Ground => {
-                self.process_ground(
-                    byte,
-                    terminal,
-                );
-
+                self.process_ground(byte, terminal);
                 ParserOutput::none()
             }
 
@@ -106,28 +103,23 @@ impl AnsiParser {
             }
 
             ParserState::Csi => {
-                match self.process_csi(
-                    byte,
-                    terminal,
-                ) {
-                    Some(response) => {
-                        ParserOutput::response(
-                            response
-                        )
-                    }
-
-                    None => {
-                        ParserOutput::none()
-                    }
+                match self.process_csi(byte, terminal) {
+                    Some(response) => ParserOutput::response(response),
+                    None => ParserOutput::none(),
                 }
             }
 
             ParserState::Osc => {
                 match self.process_osc(byte) {
+                    Some(event) => ParserOutput::event(event),
+                    None => ParserOutput::none(),
+                }
+            }
+
+            ParserState::OscEscape => {
+                match self.process_osc_escape(byte) {
                     Some(event) => {
-                        ParserOutput::event(
-                            event
-                        )
+                        ParserOutput::event(event)
                     }
 
                     None => {
@@ -279,6 +271,17 @@ impl AnsiParser {
                 None
             }
 
+            b'X' => {
+                let count = parameters
+                    .get(0)
+                    .copied()
+                    .unwrap_or(1)
+                    .max(1);
+
+                terminal.erase_characters(count);
+                None
+            }
+
             b'h' | b'l' => None,
 
             _ => None,
@@ -302,11 +305,34 @@ impl AnsiParser {
                 event
             }
 
-            _ => {
-                self.osc_data.push(
-                    byte as char
-                );
+            0x1B => {
+                self.state = ParserState::OscEscape;
+                None
+            }
 
+            _ => {
+                self.osc_data.push(byte as char);
+                None
+            }
+        }
+    }
+
+    fn process_osc_escape(
+        &mut self,
+        byte: u8,
+    ) -> Option<ParserEvent> {
+        match byte {
+            b'\\' => {
+                let event = self.finish_osc();
+                self.osc_data.clear();
+                self.state = ParserState::Ground;
+                event
+            }
+
+            _ => {
+                self.osc_data.push('\x1b');
+                self.osc_data.push(byte as char);
+                self.state = ParserState::Osc;
                 None
             }
         }
