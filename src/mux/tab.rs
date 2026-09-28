@@ -49,14 +49,22 @@ impl Tab {
         }
     }
 
-    pub fn terminal(&self) -> &Terminal {
+    pub fn terminal(
+        &self,
+    ) -> Option<&Terminal> {
         self.active_pane().terminal()
     }
 
     pub fn terminal_mut(
         &mut self,
-    ) -> &mut Terminal {
+    ) -> Option<&mut Terminal> {
         self.active_pane_mut().terminal_mut()
+    }
+
+    pub fn active_pane_is_terminal(
+        &self,
+    ) -> bool {
+        self.active_pane().is_terminal()
     }
 
     pub fn write(
@@ -116,11 +124,14 @@ impl Tab {
         &mut self,
         direction: SplitDirection,
     ) {
-        let columns = self.active_pane()
-        .terminal().width();
+        let Some(terminal) =
+            self.active_pane().terminal()
+        else {
+            return;
+        };
 
-        let rows = self.active_pane()
-        .terminal().height();
+        let columns = terminal.width();
+        let rows = terminal.height();
 
         if let Some(new_pane_id) =
             self.root.split_pane(
@@ -128,9 +139,25 @@ impl Tab {
                 direction,
                 columns,
                 rows,
-            ) {
-                self.focused_pane = new_pane_id;
-            }
+            )
+        {
+            self.focused_pane =
+                new_pane_id;
+        }
+    }
+
+    pub fn split_system_monitor(
+        &mut self,
+    ) {
+        let monitor = Pane::new_system_monitor();
+        if let Some(new_pane_id) = self.root.split_pane_with(
+            self.focused_pane,
+            SplitDirection::Vertical,
+            monitor,
+        ) {
+            self.focused_pane = new_pane_id;
+            self.search = None;
+        }
     }
 
     pub fn for_each_pane<F>(
@@ -665,14 +692,26 @@ impl Tab {
             }
         };
 
-        let matches = 
+        let matches =
             if query.is_empty() {
                 Vec::new()
             } else {
-                self.terminal().search(&query)
+                match self.terminal() {
+                    Some(terminal) => {
+                        terminal.search(
+                            &query
+                        )
+                    }
+
+                    None => {
+                        Vec::new()
+                    }
+                }
             };
 
-        if let Some(search) = &mut self.search {
+        if let Some(search) =
+            &mut self.search
+        {
             search.matches = matches;
             search.current_match = 0;
         }
@@ -745,13 +784,20 @@ impl Tab {
     fn reveal_current_search_match(
         &mut self,
     ) {
-        let Some(found) = self.current_search_match()
+        let Some(found) =
+            self.current_search_match()
         else {
             return;
         };
 
-        self.terminal_mut().reveal_history_row(
-            found.start.y 
+        let Some(terminal) =
+            self.terminal_mut()
+        else {
+            return;
+        };
+
+        terminal.reveal_history_row(
+            found.start.y
         );
     }
 

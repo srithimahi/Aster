@@ -11,3 +11,4 @@ winit = "0.30.13"
 serde = { version = "1", features = ["derive"] }
 toml = "0.9"
 arboard = "3.6.1"
+sysinfo = "0.39.6"

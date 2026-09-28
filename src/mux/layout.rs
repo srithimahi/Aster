@@ -433,6 +433,79 @@ impl PaneNode {
         }
     }
 
+    pub fn split_pane_with(
+        &mut self,
+        target_id: usize,
+        direction: SplitDirection,
+        new_pane: Pane,
+    ) -> Option<usize> {
+        match self {
+            PaneNode::Pane(existing_pane) => {
+                if existing_pane.id() != target_id {
+                    return None;
+                }
+
+                let new_pane_id = new_pane.id();
+                let replacement_pane = Pane::new(1, 1,);
+                let old_pane = std::mem::replace(
+                    existing_pane,
+                    replacement_pane,
+                );
+
+                *self = PaneNode::Split {
+                    id: NEXT_SPLIT_ID.fetch_add(
+                        1,
+                        Ordering::Relaxed,
+                    ),
+
+                    direction,
+                    ratio: 0.5,
+                    first: Box::new(
+                        PaneNode::Pane(
+                            old_pane
+                        )
+                    ),
+
+                    second: Box::new(
+                        PaneNode::Pane(
+                            new_pane
+                        )
+                    ),
+                };
+
+                Some(new_pane_id)
+            }
+
+            PaneNode::Split {
+                first,
+                second,
+                ..
+            } => {
+                if first.find_pane(
+                    target_id
+                ).is_some() {
+                    return first.split_pane_with(
+                        target_id,
+                        direction,
+                        new_pane,
+                    );
+                }
+
+                if second.find_pane(
+                    target_id
+                ).is_some() {
+                    return second.split_pane_with(
+                        target_id,
+                        direction,
+                        new_pane,
+                    );
+                }
+
+                None
+            }
+        }
+    }
+
     pub fn collect_pane_ids(
         &self,
         ids: &mut Vec<usize>,
