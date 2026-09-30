@@ -60,6 +60,10 @@ enum AsterOverlay {
         query: String,
         selected: usize,
     },
+    CommandLine {
+        input: String,
+        error: Option<String>,
+    },
 }
 
 struct AsterApp {
@@ -77,6 +81,7 @@ struct AsterApp {
     mouse_x: f64,
     mouse_y: f64,
     overlay: Option<AsterOverlay>,
+    terminal_input_fresh: bool,
 }
 
 impl AsterApp {
@@ -98,6 +103,7 @@ impl AsterApp {
             mouse_x: 0.0,
             mouse_y: 0.0, 
             overlay: None,
+            terminal_input_fresh: true,
         }
     }
 
@@ -1214,7 +1220,7 @@ impl ApplicationHandler for AsterApp {
 
                             let content_top = modal_y + 82;
                             let middle_y = content_top + 155;
-                            let content_bottom = modal_y + modal_height - 58;
+                            let content_bottom = modal_y + modal_height - 28;
 
                             self.renderer.draw_rect(
                                 center_x,
@@ -1429,40 +1435,6 @@ impl ApplicationHandler for AsterApp {
                                 shortcut_size,
                                 cursor,
                             );
-
-                            let footer_y = modal_y + modal_height - 42;
-
-                            self.renderer.draw_rect(
-                                modal_x + 26,
-                                footer_y - 12,
-                                modal_width.saturating_sub(52),
-                                1,
-                                cursor,
-                            );
-
-                            self.renderer.draw_text(
-                                "Command Palette   Ctrl+Shift+P",
-                                left_x,
-                                footer_y,
-                                10.5,
-                                cursor,
-                            );
-
-                            self.renderer.draw_text(
-                                "Shortcuts   :shortcuts",
-                                right_x,
-                                footer_y,
-                                10.5,
-                                cursor,
-                            );
-
-                            self.renderer.draw_text(
-                                "Esc Close",
-                                modal_x + modal_width - 105,
-                                footer_y,
-                                9.0,
-                                foreground,
-                            );
                         }
 
                         AsterOverlay::CommandPalette {
@@ -1537,8 +1509,8 @@ impl ApplicationHandler for AsterApp {
                             );
 
                             self.renderer.draw_rect(
-                                palette_x,
-                                palette_y,
+                                palette_x + 28,
+                                palette_y + 108,
                                 palette_width.saturating_sub(56),
                                 1,
                                 cursor,
@@ -1684,38 +1656,77 @@ impl ApplicationHandler for AsterApp {
                                     cursor,
                                 );
                             }
+                        }
+
+                        AsterOverlay::CommandLine {
+                            input,
+                            error,
+                        } => {
+                            let bar_width = 650_u32.min(size.width.saturating_sub(60));
+                            let bar_height = 
+                                if error.is_some() {
+                                    105
+                                } else {
+                                    78
+                                };
+
+                            let bar_x = size.width.saturating_sub(bar_width) / 2;
+                            let bar_y = size.height.saturating_sub(bar_height)
+                                .saturating_sub(35);
 
                             self.renderer.draw_rect(
-                                palette_x + 26,
-                                palette_y + palette_height - 48,
-                                palette_width.saturating_sub(52),
-                                1,
+                                bar_x,
+                                bar_y,
+                                bar_width,
+                                bar_height,
+                                background,
+                            );
+
+                            self.renderer.draw_pane_border(
+                                bar_x,
+                                bar_y,
+                                bar_width,
+                                bar_height,
                                 cursor,
                             );
 
+                            let command_text = format!(":{}", input);
+
                             self.renderer.draw_text(
-                                "Up/Down Navigate",
-                                palette_x + 30,
-                                palette_y + palette_height - 31,
-                                9.0,
+                                &command_text,
+                                bar_x + 24,
+                                bar_y + 18,
+                                16.0,
+                                foreground,
+                            );
+
+                            let cursor_x = bar_x + 24 + (command_text.chars().count() as u32 * 16);
+
+                            self.renderer.draw_rect(
+                                cursor_x,
+                                bar_y + 17,
+                                2,
+                                20,
                                 cursor,
                             );
 
-                            self.renderer.draw_text(
-                                "Enter Run",
-                                palette_x + 235,
-                                palette_y + palette_height - 31,
-                                9.0,
-                                cursor,
-                            );
-
-                            self.renderer.draw_text(
-                                "Esc Close",
-                                palette_x + palette_width - 115,
-                                palette_y + palette_height - 31,
-                                9.0,
-                                cursor,
-                            );
+                            if let Some(error) = error {
+                                self.renderer.draw_text(
+                                    error,
+                                    bar_x + 24,
+                                    bar_y + 52,
+                                    11.0,
+                                    cursor,
+                                );
+                            } else {
+                                self.renderer.draw_text(
+                                    "Enter Run    Esc Cancel",
+                                    bar_x + 24,
+                                    bar_y + 50,
+                                    10.0,
+                                    cursor,              
+                                );
+                            }
                         }
                     }
                 }
@@ -2073,6 +2084,80 @@ impl ApplicationHandler for AsterApp {
                         return;
                     }
 
+                    let mut command_to_execute: Option<AsterCommand> = None;
+                    let mut close_command_line = false;
+
+                    if let Some(
+                        AsterOverlay::CommandLine {
+                            input,
+                            error,
+                        }
+                    ) = &mut self.overlay {
+                        match &event.logical_key {
+                            Key::Named(NamedKey::Backspace) => {
+                                if input.is_empty() {
+                                    close_command_line = true;
+                                } else {
+                                    input.pop();
+                                    *error = None;
+                                }
+                                window.request_redraw();
+                            }
+
+                            Key::Named(NamedKey::Enter) => {
+                                let command_name = input.trim();
+                                if let Some(command) = AsterCommand::from_command_name(command_name) {
+                                    command_to_execute = Some(command);
+                                } else if command_name.is_empty() {
+                                    close_command_line = true;
+                                } else {
+                                    *error = Some(
+                                        format!(
+                                            "Unknown Aster command: :{}",
+                                            command_name
+                                        )
+                                    );
+                                }
+
+                                window.request_redraw();
+                            }
+
+                            Key::Character(character) => {
+                                if !control && !self.modifiers.alt_key() {
+                                    input.push_str(character);
+                                    *error = None;
+                                    window.request_redraw();
+                                }
+                            }
+
+                            _ => {}
+                        }
+                    }
+
+                    if close_command_line {
+                        self.overlay = None;
+                        self.terminal_input_fresh = true;
+                        window.request_redraw();
+                        return;
+                    }
+
+                    if let Some(command) = command_to_execute {
+                        self.overlay = None;
+                        self.terminal_input_fresh = true;
+                        self.execute_command(
+                            command,
+                            window,
+                        );
+                        return;
+                    }
+
+                    if matches!(
+                        self.overlay,
+                        Some(AsterOverlay::CommandLine { .. })
+                    ) {
+                        return;
+                    }
+
                     if let Some(
                         AsterOverlay::CommandPalette {
                             query,
@@ -2298,6 +2383,19 @@ impl ApplicationHandler for AsterApp {
                     }
                 }
 
+                if self.terminal_input_fresh {
+                    if let Key::Character(character) = &event.logical_key {
+                        if character == ":" && !control && !self.modifiers.alt_key() {
+                            self.overlay = Some(AsterOverlay::CommandLine {
+                                input: String::new(),
+                                error: None,
+                            });
+                            window.request_redraw();
+                            return;
+                        }
+                    }
+                }
+
                 let pane_input = match &event.logical_key {
                     Key::Named(NamedKey::ArrowUp) => {
                         Some(PaneInput::Up)
@@ -2352,6 +2450,7 @@ impl ApplicationHandler for AsterApp {
                 match &event.logical_key {
                     Key::Named(NamedKey::Enter) => {
                         self.active_tab_mut().write("\r");
+                        self.terminal_input_fresh = true;
                     }
 
                     Key::Named(NamedKey::Backspace) => {
@@ -2389,6 +2488,10 @@ impl ApplicationHandler for AsterApp {
                     _ => {
                         if let Some(text) = &event.text {
                             self.active_tab_mut().write(text);
+
+                            if !text.is_empty() {
+                                self.terminal_input_fresh = false;
+                            }
                         }
                     }
                 }
