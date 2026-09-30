@@ -1,3 +1,4 @@
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AsterCommand {
     NewTab,
@@ -238,4 +239,18 @@ impl AsterCommand {
 
         AsterCommand::ReloadConfig,
     ];
+
+    pub fn matches_query(&self, query: &str) -> bool {
+        let query = query.trim().to_lowercase();
+
+        if query.is_empty() {
+            return true;
+        }
+
+        let name = self.name().to_lowercase();
+        let command_name = self.command_name().to_lowercase();
+        let description = self.description().to_lowercase();
+
+        name.contains(&query) || command_name.contains(&query) || description.contains(&query)
+    }
 }
