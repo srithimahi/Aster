@@ -27,6 +27,8 @@ use std::{
     num::NonZeroU32,
     sync::Arc,
 };
+
+use std::path::Path;
 use commands::AsterCommand;
 
 use softbuffer::{Context, Surface};
@@ -201,6 +203,46 @@ impl AsterApp {
         } else if self.active_tab >= self.tabs.len() {
             self.active_tab = self.tabs.len() - 1;
         }
+    }
+
+    fn set_theme(
+        &mut self,
+        name: &str,
+        window: &Window,
+    ) -> Result<(), String> {
+        let name = name
+            .trim()
+            .to_ascii_lowercase();
+
+        if name.is_empty() {
+            return Err(
+                "Usage: :theme <name>".to_string()
+            );
+        }
+
+        let path = format!(
+            "themes/{}.toml",
+            name
+        );
+
+        if !Path::new(&path).exists() {
+            return Err(
+                format!(
+                    "Theme '{}' doesn't exist",
+                    name
+                )
+            );
+        }
+
+        self.theme = Theme::load(&path);
+
+        println!(
+            "Switched Aster theme to '{}'",
+            name
+        );
+
+        window.request_redraw();
+        Ok(())
     }
 
     fn execute_command(
@@ -1680,6 +1722,8 @@ impl ApplicationHandler for AsterApp {
                             }
                         }
 
+
+
                         AsterOverlay::CommandLine {
                             input,
                             error,
@@ -2159,6 +2203,7 @@ impl ApplicationHandler for AsterApp {
 
                     let mut command_to_execute: Option<AsterCommand> = None;
                     let mut close_command_line = false;
+                    let mut command_line_to_execute: Option<String> = None;
 
                     let mut renamed_tab: Option<String> = None;
 
@@ -2223,18 +2268,12 @@ impl ApplicationHandler for AsterApp {
                             }
 
                             Key::Named(NamedKey::Enter) => {
-                                let command_name = input.trim();
-                                if let Some(command) = AsterCommand::from_command_name(command_name) {
-                                    command_to_execute = Some(command);
-                                } else if command_name.is_empty() {
+                                let command_text = input.trim().to_string();
+
+                                if command_text.is_empty() {
                                     close_command_line = true;
                                 } else {
-                                    *error = Some(
-                                        format!(
-                                            "Unknown Aster command: :{}",
-                                            command_name
-                                        )
-                                    );
+                                    command_line_to_execute = Some(command_text);
                                 }
 
                                 window.request_redraw();
@@ -2248,8 +2287,112 @@ impl ApplicationHandler for AsterApp {
                                 }
                             }
 
-                            _ => {}
+                            _ => {
+                                if !control && !self.modifiers.alt_key() {
+                                    if let Some(text) = &event.text {
+                                        if !text.is_empty() {
+                                            input.push_str(text);
+                                            *error = None;
+                                            window.request_redraw();
+                                        }
+                                    }
+                                }
+                            }
                         }
+                    }
+
+                    if let Some(command_text) = command_line_to_execute {
+                        let mut parts = command_text.split_whitespace();
+
+                        let command_name = parts.next().unwrap_or("");
+                        if command_name.eq_ignore_ascii_case("theme") {
+                            let theme_name = parts.next();
+                            let result = match theme_name {
+                                Some(name)
+                                    if parts.next().is_none() => {
+                                        self.set_theme(
+                                            name, window,
+                                        )
+                                    }
+
+                                    Some(_) => {
+                                        Err(
+                                            "Usage: :theme <name>".to_string()
+                                        )
+                                    }
+
+                                    None => {
+                                        Err(
+                                            "Usage: :theme <name>".to_string()
+                                        )
+                                    }
+                            };
+
+                            match result {
+                                Ok(()) => {
+                                    self.overlay = None;
+                                    self.terminal_input_fresh = true;
+                                }
+
+                                Err(message) => {
+                                    self.overlay = Some(
+                                        AsterOverlay::CommandLine {
+                                            input: command_text,
+                                            error: Some(message),
+                                        }
+                                    );
+                                }
+                            }
+
+                            window.request_redraw();
+                            return;
+                        }
+
+                        if parts.next().is_some() {
+                            self.overlay = Some(
+                                AsterOverlay::CommandLine {
+                                    input: command_text.clone(),
+                                    error: Some(
+                                        format!(
+                                            ":{} doesn't take arguments",
+                                            command_name
+                                        )
+                                    ),
+                                }
+                            );
+
+                            window.request_redraw();
+                            return;
+                        }
+
+                        if let Some(command) = AsterCommand::from_command_name(
+                            command_name
+                        ) {
+                            self.overlay = None;
+                            self.terminal_input_fresh = true;
+
+                            self.execute_command(
+                                command,
+                                window,
+                            );
+
+                            return;
+                        }
+
+                        self.overlay = Some(
+                            AsterOverlay::CommandLine {
+                                input: command_text.clone(),
+                                error: Some(
+                                    format!(
+                                        "Unknown Aster command: :{}",
+                                        command_name
+                                    )
+                                ),
+                            }
+                        );
+
+                        window.request_redraw();
+                        return;
                     }
 
                     if close_command_line {
