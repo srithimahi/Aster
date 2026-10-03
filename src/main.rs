@@ -296,6 +296,130 @@ impl AsterApp {
         themes
     }
 
+    fn autocomplete_command_line(
+        input: &str,
+    ) -> (Option<String>, Option<String>) {
+        let trimmed = input.trim_start();
+        if trimmed.eq_ignore_ascii_case("theme") {
+            return(
+                Some("theme ".to_string()),
+                None,
+            );
+        }
+
+        if trimmed
+            .to_ascii_lowercase()
+            .starts_with("theme ") {
+            let theme_prefix = trimmed[6..].trim();
+            let themes = Self::available_themes();
+            let matches: Vec<String> = themes
+                .into_iter()
+                .filter(|theme| {
+                    theme
+                        .to_ascii_lowercase()
+                        .starts_with(
+                            &theme_prefix.to_ascii_lowercase()
+                        )
+                }).collect();
+
+            return match matches.len() {
+                0 => {
+                    (
+                        None,
+                        Some(
+                            format!(
+                                "No theme matches '{}'",
+                                theme_prefix
+                            )
+                        ),
+                    )
+                }
+
+                1 => {
+                    (
+                        Some(
+                            format!(
+                                "theme {}",
+                                matches[0]
+                            )
+                        ),
+                        None,
+                    )
+                }
+
+                _ => {
+                    (
+                        None,
+                        Some(
+                            format!(
+                                "Matches: {}",
+                                matches.join(", ")
+                            )
+                        ),
+                    )
+                }
+            };
+        }
+
+        let prefix = trimmed.to_ascii_lowercase();
+
+        let mut commands: Vec<String> = AsterCommand::ALL
+                                            .iter()
+                                            .map(|command| {
+                                                command 
+                                                    .command_name()
+                                                    .to_string()
+                                            }).collect();
+
+        commands.push(
+            "theme".to_string()
+        );
+
+        commands.sort();
+        commands.dedup();
+
+        let matches: Vec<String> = commands
+            .into_iter()
+            .filter(|command| {
+                command
+                    .to_ascii_lowercase()
+                    .starts_with(&prefix)
+            }).collect();
+
+        match matches.len() {
+            0 => {
+                (
+                    None,
+                    Some(
+                        format!(
+                            "No command matches '{}'",
+                            trimmed
+                        )
+                    ),
+                )
+            }
+
+            1 => {
+                (
+                    Some(matches[0].clone()),
+                    None,
+                )
+            }
+
+            _ => {
+                (
+                    None,
+                    Some(
+                        format!(
+                            "Matches: {}",
+                            matches.join(", ")
+                        )
+                    ),
+                )
+            }
+        }
+    }
+
     fn execute_command(
         &mut self,
         command: AsterCommand,
@@ -2328,6 +2452,25 @@ impl ApplicationHandler for AsterApp {
                                 }
 
                                 window.request_redraw();
+                            }
+
+                            Key::Named(NamedKey::Tab) => {
+                                let (
+                                    completion,
+                                    completion_message,
+                                ) = Self::autocomplete_command_line(
+                                    input
+                                );
+
+                                if let Some(completed) = completion {
+                                    *input = completed;
+                                    *error = None;
+                                } else {
+                                    *error = completion_message;
+                                }
+
+                                window.request_redraw();
+                                return;
                             }
 
                             Key::Character(character) => {

@@ -1,0 +1,23 @@
+[colors]
+background = "#000000"
+foreground = "#FFFFFF"
+cursor = "#FFFFFF"
+
+[palette]
+black = "#000000"
+red = "#BFBFBF"
+green = "#D0D0D0"
+yellow = "#E0E0E0"
+blue = "#A8A8A8"
+magenta = "#C8C8C8"
+cyan = "#D8D8D8"
+white = "#E8E8E8"
+
+bright_black = "#666666"
+bright_red = "#CCCCCC"
+bright_green = "#D6D6D6"
+bright_yellow = "#E0E0E0"
+bright_blue = "#B8B8B8"
+bright_magenta = "#D0D0D0"
+bright_cyan = "#E8E8E8"
+bright_white = "#FFFFFF"
