@@ -28,7 +28,6 @@ use std::{
     sync::Arc,
 };
 
-use std::path::Path;
 use commands::AsterCommand;
 
 use softbuffer::{Context, Surface};
@@ -210,39 +209,91 @@ impl AsterApp {
         name: &str,
         window: &Window,
     ) -> Result<(), String> {
-        let name = name
-            .trim()
-            .to_ascii_lowercase();
-
-        if name.is_empty() {
+        let requested_name = name.trim().to_ascii_lowercase();
+        if requested_name.is_empty() {
             return Err(
                 "Usage: :theme <name>".to_string()
             );
         }
 
-        let path = format!(
-            "themes/{}.toml",
-            name
-        );
+        let themes = Self::available_themes();
 
-        if !Path::new(&path).exists() {
+        let Some(actual_name) = themes
+            .iter()
+            .find(|theme_name| {
+                theme_name.eq_ignore_ascii_case(
+                    &requested_name
+                )
+            })
+        else {
+            let available = if themes.is_empty() {
+                "none".to_string()
+            } else {
+                themes.join(", ")
+            };
+
             return Err(
                 format!(
-                    "Theme '{}' doesn't exist",
-                    name
+                    "Unknown theme '{}'. Available: {}",
+                    requested_name,
+                    available
                 )
             );
-        }
+        };
+
+        let path = format!(
+            "themes/{}.toml",
+            actual_name
+        );
 
         self.theme = Theme::load(&path);
 
         println!(
             "Switched Aster theme to '{}'",
-            name
+            actual_name
         );
 
         window.request_redraw();
         Ok(())
+    }
+
+    fn available_themes() -> Vec<String> {
+        let mut themes = Vec::new();
+        let Ok(entries) = std::fs::read_dir("themes") else {
+            return themes;
+        };
+
+        for entry in entries.flatten() {
+            let path = entry.path();
+
+            if !path.is_file() {
+                continue;
+            }
+
+            let Some(extension) = path.extension() else {
+                continue;
+            };
+
+            if extension != "toml" {
+                continue;
+            }
+
+            let Some(stem) = path.file_stem() else {
+                continue;
+            };
+
+            let Some(name) = stem.to_str() else {
+                continue;
+            };
+
+            themes.push(name.to_string());
+        }
+
+        themes.sort_by_key(|name| {
+            name.to_ascii_lowercase()
+        });
+
+        themes
     }
 
     fn execute_command(
@@ -2308,24 +2359,35 @@ impl ApplicationHandler for AsterApp {
                         if command_name.eq_ignore_ascii_case("theme") {
                             let theme_name = parts.next();
                             let result = match theme_name {
-                                Some(name)
-                                    if parts.next().is_none() => {
-                                        self.set_theme(
-                                            name, window,
-                                        )
-                                    }
+                                Some(name) if parts.next().is_none() => {
+                                    self.set_theme(
+                                        name,
+                                        window,
+                                    )
+                                }
 
-                                    Some(_) => {
-                                        Err(
-                                            "Usage: :theme <name>".to_string()
-                                        )
-                                    }
+                                Some(_) => {
+                                    Err(
+                                        "Usage: :theme <name>".to_string()
+                                    )
+                                }
 
-                                    None => {
-                                        Err(
-                                            "Usage: :theme <name>".to_string()
+                                None => {
+                                    let themes = Self::available_themes();
+                                    let available = 
+                                        if themes.is_empty() {
+                                            "none".to_string()
+                                        } else {
+                                            themes.join(", ")
+                                        };
+
+                                    Err(
+                                        format!(
+                                            "Available themes: {}",
+                                            available
                                         )
-                                    }
+                                    )
+                                }
                             };
 
                             match result {
