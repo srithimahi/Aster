@@ -273,6 +273,7 @@ impl Renderer {
         foreground: u32,
         background: u32,
         active_background: u32,
+        active_foreground: u32,
     ) {
         self.draw_rect(
             0,
@@ -300,12 +301,26 @@ impl Renderer {
                 .take(max_characters)
                 .collect();
 
+            let text_color = if index == active_tab {
+                active_foreground
+            } else {
+                foreground
+            };
+
             self.draw_text(
                 &label,
                 x + 12,
                 5,
                 font_size,
-                foreground,
+                text_color,
+            );
+
+            self.draw_text(
+                "x",
+                x + tab_width - 24,
+                5,
+                font_size,
+                text_color,
             );
 
             self.draw_text(

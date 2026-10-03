@@ -60,9 +60,14 @@ enum AsterOverlay {
         query: String,
         selected: usize,
     },
+
     CommandLine {
         input: String,
         error: Option<String>,
+    },
+
+    RenameTab {
+        input: String,
     },
 }
 
@@ -71,6 +76,7 @@ struct AsterApp {
     surface: Option<Surface<Arc<Window>, Arc<Window>>>,
     tabs: Vec<Tab>,
     active_tab: usize,
+    next_tab_number: usize,
     renderer: Renderer,
     config: Config,
     theme: Theme,
@@ -90,9 +96,10 @@ impl AsterApp {
             window: None,
             surface: None,
             tabs: vec![
-                Tab::new(80, 24)
+                Tab::new(80, 24, "Tab 1".to_string(),)
             ],
             active_tab: 0,
+            next_tab_number: 2,
             renderer: Renderer::new(900, 600),
             config,
             theme,
@@ -116,26 +123,36 @@ impl AsterApp {
     }
 
     fn new_tab(&mut self) {
-        let(columns, rows,) = match self.active_tab().terminal() {
-            Some(terminal) => {
-                (
-                    terminal.width(),
-                    terminal.height(),
-                )
-            }
-
-            None => {
-                (80, 24)
-            }
+        let (columns, rows) = if let Some(terminal) = self.active_tab().terminal() {
+            (
+                terminal.width(),
+                terminal.height(),
+            )
+        } else {
+            (80, 24)
         };
 
+        let title = format!(
+            "Tab {}",
+            self.next_tab_number
+        );
+
+        self.next_tab_number += 1;
+
         self.tabs.push(
-            Tab::new(columns, rows)
+            Tab::new(
+                columns,
+                rows,
+                title,
+            )
         );
 
         self.active_tab = self.tabs.len() - 1;
 
-        println!("Created the tabbie {}", self.active_tab + 1);
+        println!(
+            "Created tab {}",
+            self.active_tab + 1,
+        );
     }
 
     fn next_tab(&mut self) {
@@ -144,7 +161,11 @@ impl AsterApp {
         }
 
         self.active_tab = (self.active_tab + 1) % self.tabs.len();
-        println!("Switched to tabbie {}", self.active_tab + 1);
+
+        println!(
+            "Switched to tabbie {}",
+            self.active_tab + 1
+        );
     }
 
     fn previous_tab(&mut self) {
@@ -559,6 +580,7 @@ impl ApplicationHandler for AsterApp {
                     foreground,
                     background, 
                     cursor,
+                    background,
                 );
 
                 let padding = self.config.window.padding;
@@ -1728,6 +1750,57 @@ impl ApplicationHandler for AsterApp {
                                 );
                             }
                         }
+
+                        AsterOverlay::RenameTab {
+                            input,
+                        } => {
+                            let box_width = 500_u32.min(size.width.saturating_sub(60));
+                            let box_height = 90;
+                            let box_x = size.width.saturating_sub(box_width) / 2;
+                            let box_y = size.height.saturating_sub(box_height) / 2;
+
+                            self.renderer.draw_rect(
+                                box_x,
+                                box_y,
+                                box_width,
+                                box_height,
+                                background,
+                            );
+
+                            self.renderer.draw_pane_border(
+                                box_x,
+                                box_y,
+                                box_width,
+                                box_height,
+                                cursor,
+                            );
+
+                            self.renderer.draw_text(
+                                "Rename Tab",
+                                box_x + 22,
+                                box_y + 16,
+                                14.0,
+                                cursor,
+                            );
+
+                            let display = format!("> {}", input);
+
+                            self.renderer.draw_text(
+                                &display,
+                                box_x + 22,
+                                box_y + 48,
+                                14.0,
+                                foreground,
+                            );
+
+                            self.renderer.draw_text(
+                                "Enter Save   Esc Cancel",
+                                box_x + box_width - 210,
+                                box_y + 18,
+                                9.0,
+                                foreground,
+                            );
+                        }
                     }
                 }
 
@@ -2087,6 +2160,51 @@ impl ApplicationHandler for AsterApp {
                     let mut command_to_execute: Option<AsterCommand> = None;
                     let mut close_command_line = false;
 
+                    let mut renamed_tab: Option<String> = None;
+
+                    if let Some(
+                        AsterOverlay::RenameTab {
+                            input,
+                        }
+                    ) = &mut self.overlay {
+                        match &event.logical_key {
+                            Key::Named(NamedKey::Backspace) => {
+                                input.pop();
+                                window.request_redraw();
+                                return;
+                            }
+
+                            Key::Named(NamedKey::Enter) => {
+                                let new_title = input.trim().to_string();
+
+                                if !new_title.is_empty() {
+                                    renamed_tab = Some(new_title);
+                                }
+                            }
+
+                            Key::Character(character) => {
+                                if !control && !self.modifiers.alt_key() {
+                                    input.push_str(character);
+                                    window.request_redraw();
+                                }
+
+                                return;
+                            }
+
+                            _ => {
+                                return;
+                            }
+                        }
+                    }
+
+                    if let Some(new_title) = renamed_tab {
+                        self.active_tab_mut().set_title(new_title);
+
+                        self.overlay = None;
+                        window.request_redraw();
+                        return;
+                    }
+
                     if let Some(
                         AsterOverlay::CommandLine {
                             input,
@@ -2241,6 +2359,23 @@ impl ApplicationHandler for AsterApp {
                             }
                         }
                     }
+                }
+
+                if matches!(
+                    event.logical_key,
+                    Key::Named(NamedKey::F2)
+                ) {
+                    let current_title = 
+                        self.active_tab()
+                            .title()
+                            .to_string();
+
+                    self.overlay = Some(AsterOverlay::RenameTab {
+                        input: current_title,
+                    });
+
+                    window.request_redraw();
+                    return;
                 }
 
                 if control && shift {

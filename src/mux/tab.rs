@@ -21,6 +21,7 @@ pub struct SearchState {
 }
 
 pub struct Tab {
+    title: String,
     root: PaneNode,
     focused_pane: usize,
     zoomed_pane: Option<usize>,
@@ -31,6 +32,7 @@ impl Tab {
     pub fn new(
         columns: usize,
         rows: usize,
+        title: String,
     ) -> Self {
         let root =
             PaneNode::new_pane(
@@ -42,11 +44,25 @@ impl Tab {
             root.first_pane().id();
         
         Self {
+            title,
             root,
             focused_pane,
             zoomed_pane: None,
             search: None,
         }
+    }
+
+
+    pub fn set_title(
+        &mut self,
+        title: String,
+    ) {
+        let title = title.trim();
+        if title.is_empty() {
+            return;
+        }
+
+        self.title = title.to_string();
     }
 
     pub fn terminal(
@@ -818,6 +834,6 @@ impl Tab {
     pub fn title(
         &self,
     ) -> &str {
-        self.active_pane().title()
+        &self.title
     }
 }
