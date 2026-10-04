@@ -89,6 +89,10 @@ struct AsterApp {
     mouse_y: f64,
     overlay: Option<AsterOverlay>,
     terminal_input_fresh: bool,
+
+    command_history: Vec<String>,
+    command_history_index: Option<usize>,
+    command_history_draft: String,
 }
 
 impl AsterApp {
@@ -112,6 +116,10 @@ impl AsterApp {
             mouse_y: 0.0, 
             overlay: None,
             terminal_input_fresh: true,
+
+            command_history: Vec::new(),
+            command_history_index: None,
+            command_history_draft: String::new(),
         }
     }
 
@@ -418,6 +426,95 @@ impl AsterApp {
                 )
             }
         }
+    }
+
+    fn remember_command(
+        &mut self,
+        command: &str,
+    ) {
+        let command = command.trim();
+
+        if command.is_empty() {
+            return;
+        }
+
+        let duplicate = self.command_history
+                            .last()
+                            .map(|previous| {
+                                previous == command
+                            })
+                            .unwrap_or(false);
+        
+        if !duplicate {
+            self.command_history.push(
+                command.to_string()
+            );
+        }
+
+        const MAX_HISTORY: usize = 100;
+
+        if self.command_history.len() > MAX_HISTORY {
+            let overflow = self.command_history.len() - MAX_HISTORY;
+            self.command_history.drain(0..overflow);
+        }
+
+        self.command_history_index = None;
+        self.command_history_draft.clear();
+    }
+
+    fn older_command(
+        &mut self,
+        current_input: &str,
+    ) -> Option<String> {
+        if self.command_history.is_empty() {
+            return None;
+        }
+
+        let next_index = match self.command_history_index {
+            None => {
+                self.command_history_draft = current_input.to_string();
+                self.command_history.len() - 1
+            }
+
+            Some(index) => {
+                index.saturating_sub(1)
+            }
+        };
+
+        self.command_history_index = Some(next_index);
+        self.command_history
+            .get(next_index)
+            .cloned()
+    }
+
+    fn newer_command(
+        &mut self,
+    ) -> Option<String> {
+        let Some(index) = self.command_history_index 
+        else {
+            return None;
+        };
+
+        if index + 1 < self.command_history.len() {
+            let next_index = index + 1;
+
+            self.command_history_index = Some(next_index);
+            return self.command_history
+                    .get(next_index)
+                    .cloned();
+        }
+
+        self.command_history_index = None;
+        Some(
+            self.command_history_draft.clone()
+        )
+    }
+
+    fn reset_command_history_navigation(
+        &mut self,
+    ) {
+        self.command_history_index = None;
+        self.command_history_draft.clear();
     }
 
     fn execute_command(
@@ -1922,8 +2019,6 @@ impl ApplicationHandler for AsterApp {
                             }
                         }
 
-
-
                         AsterOverlay::CommandLine {
                             input,
                             error,
@@ -1986,7 +2081,7 @@ impl ApplicationHandler for AsterApp {
                                 );
                             } else {
                                 self.renderer.draw_text(
-                                    "Enter Run    Esc Cancel",
+                                    "Enter Run   Tab Complete   ↑↓ History   Esc Cancel",
                                     bar_x + 24,
                                     bar_y + 50,
                                     10.0,
@@ -2389,7 +2484,20 @@ impl ApplicationHandler for AsterApp {
                         event.logical_key,
                         Key::Named(NamedKey::Escape)
                     ) {
+                        let was_command_line = matches!(
+                            self.overlay,
+                            Some(
+                                AsterOverlay::CommandLine { .. }
+                            )
+                        );
+
                         self.overlay = None;
+
+                        if was_command_line {
+                            self.terminal_input_fresh = true;
+                            self.reset_command_history_navigation();
+                        }
+
                         window.request_redraw();
                         return;
                     }
@@ -2450,6 +2558,9 @@ impl ApplicationHandler for AsterApp {
                         return;
                     }
 
+                    let mut history_direction: Option<i32> = None;
+                    let mut history_current_input = String::new();
+
                     if let Some(
                         AsterOverlay::CommandLine {
                             input,
@@ -2498,6 +2609,22 @@ impl ApplicationHandler for AsterApp {
                                 return;
                             }
 
+                            Key::Named(NamedKey::ArrowUp) => {
+                                history_current_input = input.clone();
+                                history_direction = Some(-1);
+
+                                *error = None;
+                                window.request_redraw();
+                            }
+
+                            Key::Named(NamedKey::ArrowDown) => {
+                                history_current_input = input.clone();
+
+                                history_direction = Some(1);
+                                *error = None;
+                                window.request_redraw();
+                            }
+
                             Key::Character(character) => {
                                 if !control && !self.modifiers.alt_key() {
                                     input.push_str(character);
@@ -2520,7 +2647,35 @@ impl ApplicationHandler for AsterApp {
                         }
                     }
 
+                    if let Some(direction) = history_direction {
+                        let replacement = if direction < 0 {
+                            self.older_command(
+                                &history_current_input
+                            )
+                        } else {
+                            self.newer_command()
+                        };
+
+                        if let Some(command) = replacement {
+                            if let Some(
+                                AsterOverlay::CommandLine {
+                                    input,
+                                    error,
+                                }
+                            ) = &mut self.overlay {
+                                *input = command;
+                                *error = None;
+                            }
+                        }
+
+                        window.request_redraw();
+                        return;
+                    }
+
+
                     if let Some(command_text) = command_line_to_execute {
+                        self.remember_command(&command_text); 
+                        self.terminal_input_fresh = true;
                         let mut parts = command_text.split_whitespace();
 
                         let command_name = parts.next().unwrap_or("");
@@ -2894,10 +3049,14 @@ impl ApplicationHandler for AsterApp {
                 if self.terminal_input_fresh {
                     if let Key::Character(character) = &event.logical_key {
                         if character == ":" && !control && !self.modifiers.alt_key() {
-                            self.overlay = Some(AsterOverlay::CommandLine {
+                            self.reset_command_history_navigation();
+                            self.terminal_input_fresh = true;
+
+                            self.overlay = Some(AsterOverlay:: CommandLine {
                                 input: String::new(),
                                 error: None,
                             });
+
                             window.request_redraw();
                             return;
                         }
