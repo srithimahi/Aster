@@ -1001,6 +1001,19 @@ impl ApplicationHandler for AsterApp {
 
                                             content_y += 54;
 
+                                            if let Some(message) = monitor.status_message() {
+                                                content_y += 30;
+                                                self.renderer.draw_text(
+                                                    message,
+                                                    content_x,
+                                                    content_y,
+                                                    13.0,
+                                                    cursor,
+                                                );
+
+                                                content_y += 30;
+                                            }
+
                                             self.renderer.draw_text(
                                                 "Esc / Q Back",
                                                 content_x,
@@ -1104,6 +1117,18 @@ impl ApplicationHandler for AsterApp {
                                         const LABEL_TO_VALUE: u32 = 24;
                                         const VALUE_TO_BAR: u32 = 24;
                                         const SECTION_GAP: u32 = 34;
+
+                                        if let Some(message) = monitor.status_message() {
+                                            content_y += 26;
+
+                                            self.renderer.draw_text(
+                                                message,
+                                                content_x,
+                                                content_y,
+                                                13.0,
+                                                cursor,
+                                            );
+                                        }
 
                                         self.renderer.draw_text(
                                             monitor.title(),

@@ -452,6 +452,8 @@ pub struct SystemMonitorPane {
     selected_pid: Option<u32>,
     pending_kill_pid: Option<u32>,
 
+    status_message: Option<String>,
+
     process_sort: ProcessSort,
     process_scroll: usize,
 
@@ -497,6 +499,8 @@ impl SystemMonitorPane {
 
             selected_pid: None,
             pending_kill_pid: None,
+
+            status_message: None,
 
             process_sort: ProcessSort::Cpu,
             process_scroll: 0,
@@ -801,6 +805,12 @@ impl SystemMonitorPane {
             "█".repeat(filled),
             "░".repeat(empty),
         )
+    }
+
+    pub fn status_message(
+        &self,
+    ) -> Option<&str> {
+        self.status_message.as_deref()
     }
 
     pub fn process_count(
@@ -1135,10 +1145,25 @@ impl SystemMonitorPane {
             return;
         };
 
-        self.pending_kill_pid = Some(
-            process.pid()
-        );
+        let pid = process.pid();
+        let process_name = process.name().to_string();
 
+        if pid == std::process::id() {
+            self.status_message = Some(
+                format!(
+                    "Cannot terminate {}",
+                    process_name
+                )
+            );
+
+            self.pending_kill_pid = None;
+            self.view = SystemMonitorView::ProcessInspector;
+
+            return;
+        }
+
+        self.status_message = None;
+        self.pending_kill_pid = Some(pid);
         self.view = SystemMonitorView::ConfirmKill;
     }
 
@@ -1167,50 +1192,70 @@ impl SystemMonitorPane {
     pub fn confirm_kill(
         &mut self,
     ) {
-        let Some(pid) = self.pending_kill_pid
+        let Some(pid) = self.pending_kill_pid 
         else {
             self.view = SystemMonitorView::ProcessInspector;
             return;
         };
 
+        if pid == std::process::id() {
+            self.pending_kill_pid = None;
+
+            self.status_message = Some(
+                "Cannot terminate Aster from its own System Monitor".to_string()
+            );
+
+            self.view = SystemMonitorView::ProcessInspector;
+            return;
+        }
+
         let sysinfo_pid = Pid::from_u32(pid);
 
-        let killed = match self.system.process(sysinfo_pid) {
-            Some(process) => {
-                let process_name = process
-                    .name()
-                    .to_string_lossy()
-                    .to_string();
+        let (killed, message) = 
+            match self.system.process(sysinfo_pid) {
+                Some(process) => {
+                    let process_name = process
+                        .name()
+                        .to_string_lossy()
+                        .to_string();
 
-                let result = process.kill();
-                if result {
-                    println!(
-                        "Killed process {} (PID {})",
-                        process_name,
-                        pid
-                    );
-                } else {
-                    println!(
-                        "Failed to kill process {} (PID {})",
-                        process_name,
-                        pid
-                    );
+                    let result = process.kill();
+
+                    if result {
+                        (
+                            true,
+                            format!(
+                                "Terminated {} (PID {})",
+                                process_name,
+                                pid
+                            ),
+                        )
+                    } else {
+                        (
+                            false,
+                            format!(
+                                "Could not terminate {} (PID {})",
+                                process_name,
+                                pid
+                            ),
+                        )
+                    }
                 }
 
-                result
-            }
+                None => {
+                    (
+                        false,
+                        format!(
+                            "Process PID {} no longer exists",
+                            pid 
+                        ),
+                    )
+                }
+            };
 
-            None => {
-                println!(
-                    "Process PID {} no longer exists",
-                    pid
-                );
-
-                false
-            }
-        };
-
+        self.status_message = Some(message);
         self.pending_kill_pid = None;
+
         if killed {
             self.selected_pid = None;
             self.system.refresh_processes(
