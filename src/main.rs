@@ -81,6 +81,8 @@ struct AsterApp {
     renderer: Renderer,
     config: Config,
     theme: Theme,
+    current_theme: String,
+
     modifiers: ModifiersState,
     dragging_split: Option<SplitDrag>,
     selecting_text: bool,
@@ -97,6 +99,7 @@ struct AsterApp {
 
 impl AsterApp {
     fn new(config: Config, theme:Theme) -> Self {
+        let current_theme = config.theme.clone();
         Self {
             window: None,
             surface: None,
@@ -108,6 +111,8 @@ impl AsterApp {
             renderer: Renderer::new(900, 600),
             config,
             theme,
+            current_theme,
+
             modifiers: ModifiersState::empty(),
             dragging_split: None,
             selecting_text: false,
@@ -217,22 +222,31 @@ impl AsterApp {
         name: &str,
         window: &Window,
     ) -> Result<(), String> {
-        let requested_name = name.trim().to_ascii_lowercase();
+        let requested_name = name
+                                .trim()
+                                .to_ascii_lowercase();
+
         if requested_name.is_empty() {
             return Err(
                 "Usage: :theme <name>".to_string()
             );
         }
 
-        let themes = Self::available_themes();
+        let mut themes = Self::available_themes();
+
+        themes.push("next".to_string());
+        themes.push("previous".to_string());
+        themes.sort();
+        themes.dedup();
 
         let Some(actual_name) = themes
-            .iter()
-            .find(|theme_name| {
-                theme_name.eq_ignore_ascii_case(
-                    &requested_name
-                )
-            })
+                                    .iter()
+                                    .find(|theme_name| {
+                                        theme_name
+                                            .eq_ignore_ascii_case(
+                                                &requested_name
+                                            )
+                                    })
         else {
             let available = if themes.is_empty() {
                 "none".to_string()
@@ -255,10 +269,11 @@ impl AsterApp {
         );
 
         self.theme = Theme::load(&path);
+        self.current_theme = actual_name.clone();
 
         println!(
             "Switched Aster theme to '{}'",
-            actual_name
+            self.current_theme
         );
 
         window.request_redraw();
@@ -304,6 +319,42 @@ impl AsterApp {
         themes
     }
 
+    fn cycle_theme(
+        &mut self,
+        direction: i32,
+        window: &Window,
+    ) -> Result<(), String> {
+        let themes = Self::available_themes();
+
+        if themes.is_empty() {
+            return Err(
+                "No themes were found".to_string()
+            );
+        }
+
+        let current_index = themes
+                                .iter()
+                                .position(|theme| {
+                                    theme.eq_ignore_ascii_case(
+                                        &self.current_theme
+                                    )
+                                }).unwrap_or(0);
+
+        let next_index = if direction >= 0 {
+            (current_index) + 1 % themes.len()
+        } else if current_index == 0 {
+            themes.len() - 1
+        } else {
+            current_index - 1
+        };
+
+        let next_theme = themes[next_index].clone();
+        self.set_theme(
+            &next_theme,
+            window,
+        )
+    }
+
     fn autocomplete_command_line(
         input: &str,
     ) -> (Option<String>, Option<String>) {
@@ -319,16 +370,23 @@ impl AsterApp {
             .to_ascii_lowercase()
             .starts_with("theme ") {
             let theme_prefix = trimmed[6..].trim();
-            let themes = Self::available_themes();
+            let mut themes = Self::available_themes();
+            themes.push("next".to_string());
+            themes.push("previous".to_string());
+            themes.push("prev".to_string());
+            themes.sort();
+            themes.dedup();
+
             let matches: Vec<String> = themes
-                .into_iter()
-                .filter(|theme| {
-                    theme
-                        .to_ascii_lowercase()
-                        .starts_with(
-                            &theme_prefix.to_ascii_lowercase()
-                        )
-                }).collect();
+                                            .into_iter()
+                                            .filter(|theme| {
+                                                theme  
+                                                    .to_ascii_lowercase()
+                                                    .starts_with(
+                                                        &theme_prefix
+                                                            .to_ascii_lowercase()
+                                                    )
+                                            }).collect();
 
             return match matches.len() {
                 0 => {
@@ -2682,35 +2740,62 @@ impl ApplicationHandler for AsterApp {
                         if command_name.eq_ignore_ascii_case("theme") {
                             let theme_name = parts.next();
                             let result = match theme_name {
-                                Some(name) if parts.next().is_none() => {
-                                    self.set_theme(
-                                        name,
-                                        window,
-                                    )
-                                }
-
-                                Some(_) => {
-                                    Err(
-                                        "Usage: :theme <name>".to_string()
-                                    )
-                                }
-
-                                None => {
-                                    let themes = Self::available_themes();
-                                    let available = 
-                                        if themes.is_empty() {
-                                            "none".to_string()
-                                        } else {
-                                            themes.join(", ")
-                                        };
-
-                                    Err(
-                                        format!(
-                                            "Available themes: {}",
-                                            available
+                                Some(name)
+                                    if parts.next().is_some() => {
+                                        Err(
+                                            "Usage: :theme [name|next|previous]".to_string()
                                         )
-                                    )
-                                }
+                                    }
+
+                                    Some(name)
+                                        if name.eq_ignore_ascii_case("next") => {
+                                            self.cycle_theme(
+                                                1,
+                                                window,
+                                            )
+                                        }
+
+                                        Some(name) 
+                                            if name.eq_ignore_ascii_case("previous")
+                                            || name.eq_ignore_ascii_case("prev") => {
+                                                self.cycle_theme(
+                                                    -1,
+                                                    window,
+                                                )
+                                            }
+
+                                        Some(name) => {
+                                            self.set_theme(
+                                                name, 
+                                                window,
+                                            )
+                                        }
+
+                                        None => {
+                                            let themes = Self::available_themes();
+                                            let available = if themes.is_empty() {
+                                                "none".to_string()
+                                            } else {
+                                                themes.iter()
+                                                    .map(|theme| {
+                                                        if theme.eq_ignore_ascii_case(&self.current_theme) {
+                                                            format!("[{}]", theme)
+                                                        } else {
+                                                            theme.clone()
+                                                        }
+                                                    })
+                                                    .collect::<Vec<_>>()
+                                                    .join(", ")
+                                            };
+
+                                            Err(
+                                                format!(
+                                                    "Current: {} | Available: {}",
+                                                    self.current_theme,
+                                                    available
+                                                )
+                                            )
+                                        }
                             };
 
                             match result {

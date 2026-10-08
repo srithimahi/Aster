@@ -285,6 +285,23 @@ impl Renderer {
 
         for (index, title) in titles.iter().enumerate() {
             let x = index as u32 * tab_width;
+
+            let text_color = if index == active_tab {
+                active_foreground
+            } else {
+                foreground
+            };
+
+            if index == active_tab {
+                self.draw_rect(
+                    x,
+                    0,
+                    tab_width,
+                    height,
+                    active_background,
+                );
+            }
+
             if index == active_tab {
                 self.draw_rect(
                     x,
