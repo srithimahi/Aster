@@ -263,6 +263,67 @@ impl Renderer {
         }
     }
 
+    pub fn draw_wrapped_text(
+        &mut self,
+        text: &str,
+        x: u32,
+        y: u32,
+        max_width: u32,
+        font_size: f32,
+        line_height: u32,
+        color: u32,
+    ) -> u32 {
+        let char_width =
+            (font_size as u32).max(1);
+
+        let max_characters =
+            (max_width / char_width).max(1) as usize;
+
+        let mut line = String::new();
+        let mut current_y = y;
+        let mut line_count = 0_u32;
+
+        for character in text.chars() {
+            let should_wrap =
+                character == '\n'
+                || line.chars().count() >= max_characters;
+
+            if should_wrap {
+                self.draw_text(
+                    &line,
+                    x,
+                    current_y,
+                    font_size,
+                    color,
+                );
+
+                line.clear();
+                current_y += line_height;
+                line_count += 1;
+
+                if character == '\n' {
+                    continue;
+                }
+            }
+
+            line.push(character);
+        }
+
+        if !line.is_empty() {
+            self.draw_text(
+                &line,
+                x,
+                current_y,
+                font_size,
+                color,
+            );
+
+            line_count += 1;
+        }
+
+        line_count.max(1)
+    }
+
     pub fn draw_tab_bar(
         &mut self,
         titles: &[String],
@@ -302,27 +363,12 @@ impl Renderer {
                 );
             }
 
-            if index == active_tab {
-                self.draw_rect(
-                    x,
-                    0,
-                    tab_width,
-                    height,
-                    active_background,
-                );
-            }
-
             let max_characters = 11;
+
             let label: String = title
                 .chars()
                 .take(max_characters)
                 .collect();
-
-            let text_color = if index == active_tab {
-                active_foreground
-            } else {
-                foreground
-            };
 
             self.draw_text(
                 &label,
@@ -338,14 +384,6 @@ impl Renderer {
                 5,
                 font_size,
                 text_color,
-            );
-
-            self.draw_text(
-                "x",
-                x + tab_width - 24,
-                5,
-                font_size,
-                foreground,
             );
         }
 

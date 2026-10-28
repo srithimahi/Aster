@@ -451,16 +451,32 @@ impl Terminal {
             );
         }
 
+        let old_width = self.width;
+        let old_height = self.height;
+        let old_cursor_y = self.cursor.y;
+
         let mut new_cells = vec![Cell::empty(); new_width * new_height];
-        let copy_width = self.width.min(new_width);
-        let copy_height = self.height.min(new_height);
 
-        for y in 0..copy_height {
+        let copy_width = old_width.min(new_width);
+        let copy_height = old_height.min(new_height);
+
+        let source_start_y = old_height.saturating_sub(copy_height);
+
+        let destination_start_y = new_height.saturating_sub(copy_height);
+
+        for row_offset in 0..copy_height {
+            let old_y = source_start_y + row_offset;
+            let new_y = destination_start_y + row_offset;
+
             for x in 0..copy_width {
-                let old_index = y * self.width + x;
-                let new_index = y * new_width + x;
+                let old_index =
+                    old_y * old_width + x;
 
-                new_cells[new_index] = self.cells[old_index].clone();
+                let new_index =
+                    new_y * new_width + x;
+
+                new_cells[new_index] =
+                    self.cells[old_index].clone();
             }
         }
 
@@ -469,11 +485,33 @@ impl Terminal {
         self.height = new_height;
 
         self.cursor.x = self.cursor.x.min(new_width - 1);
+
+        self.cursor.y =
+            if old_cursor_y >= source_start_y {
+                destination_start_y
+                    + (old_cursor_y - source_start_y)
+                        .min(copy_height.saturating_sub(1))
+            } else {
+                0
+            };
+
         self.cursor.y = self.cursor.y.min(new_height - 1);
 
         self.viewport_offset = self.viewport_offset.min(
-            self.scrollback.len()
+                                    self.scrollback.len()
         );
+    }
+
+    pub fn can_start_selection(
+        &self,
+        x: usize,
+        y: usize,
+    ) -> bool {
+        if x >= self.width || y >= self.height {
+            return false;
+        }
+
+        self.visible_cell(x, y).character() != ' '
     }
 
     pub fn start_selection(

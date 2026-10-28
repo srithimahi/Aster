@@ -1,7 +1,7 @@
 theme = "nebula"
 
 [window]
-padding = 20
+padding = 8
 
 [font]
 size = 19.0

@@ -103,9 +103,7 @@ impl AsterApp {
         Self {
             window: None,
             surface: None,
-            tabs: vec![
-                Tab::new(80, 24, "Tab 1".to_string(),)
-            ],
+            tabs: Vec::new(),
             active_tab: 0,
             next_tab_number: 2,
             renderer: Renderer::new(900, 600),
@@ -162,6 +160,8 @@ impl AsterApp {
         );
 
         self.active_tab = self.tabs.len() - 1;
+
+        self.terminal_input_fresh = true;
 
         println!(
             "Created tab {}",
@@ -341,7 +341,7 @@ impl AsterApp {
                                 }).unwrap_or(0);
 
         let next_index = if direction >= 0 {
-            (current_index) + 1 % themes.len()
+            (current_index + 1) % themes.len()
         } else if current_index == 0 {
             themes.len() - 1
         } else {
@@ -387,7 +387,7 @@ impl AsterApp {
                                                             .to_ascii_lowercase()
                                                     )
                                             }).collect();
-
+            
             return match matches.len() {
                 0 => {
                     (
@@ -583,21 +583,25 @@ impl AsterApp {
         match command {
             AsterCommand::NewTab => {
                 self.new_tab();
+                self.terminal_input_fresh = true;
                 window.request_redraw();
             }
 
             AsterCommand::CloseTab => {
                 self.close_active_tab();
+                self.terminal_input_fresh = true;
                 window.request_redraw();
             }
 
             AsterCommand::NextTab => {
                 self.next_tab();
+                self.terminal_input_fresh = true;
                 window.request_redraw();
             }
 
             AsterCommand::PreviousTab => {
                 self.previous_tab();
+                self.terminal_input_fresh = true;
                 window.request_redraw();
             }
 
@@ -606,6 +610,8 @@ impl AsterApp {
                     SplitDirection::Vertical
                 );
 
+                self.terminal_input_fresh = true;
+
                 window.request_redraw();
             }
 
@@ -613,6 +619,8 @@ impl AsterApp {
                 self.active_tab_mut().split_active(
                     SplitDirection::Horizontal
                 );
+
+                self.terminal_input_fresh = true;
 
                 window.request_redraw();
             }
@@ -647,6 +655,33 @@ impl AsterApp {
 
             AsterCommand::ClosePane => {
                 self.active_tab_mut().close_active_pane();
+
+                let size = window.inner_size();
+                let padding = self.config.window.padding;
+
+                let pane_width = size.width.saturating_sub(
+                    padding.saturating_mul(2)
+                );
+
+                let pane_height = size.height
+                    .saturating_sub(TAB_BAR_HEIGHT)
+                    .saturating_sub(
+                        padding.saturating_mul(2)
+                    );
+
+                let columns = (
+                    pane_width / self.config.font.cell_width
+                ).max(1) as usize;
+
+                let rows = (
+                    pane_height / self.config.font.cell_height
+                ).max(1) as usize;
+
+                self.active_tab_mut().resize(
+                    columns,
+                    rows,
+                );
+
                 window.request_redraw();
             }
 
@@ -801,6 +836,46 @@ impl ApplicationHandler for AsterApp {
                 .create_window(attributes)
                 .expect("Failed to create Aster window"),
         );
+
+        let size = window.inner_size();
+
+        let padding =
+            self.config.window.padding;
+
+        let usable_width =
+            size.width.saturating_sub(
+                padding.saturating_mul(2)
+            );
+
+        let usable_height =
+            size.height
+                .saturating_sub(TAB_BAR_HEIGHT)
+                .saturating_sub(
+                    padding.saturating_mul(2)
+                );
+
+        let columns = (
+            usable_width
+                / self.config.font.cell_width
+        ).max(1) as usize;
+
+        let rows = (
+            usable_height
+                / self.config.font.cell_height
+        ).max(1) as usize;
+
+        if self.tabs.is_empty() {
+            self.tabs.push(
+                Tab::new(
+                    columns,
+                    rows,
+                    "Tab 1".to_string(),
+                )
+            );
+
+            self.active_tab = 0;
+            self.next_tab_number = 2;
+        }
 
         let context = Context::new(window.clone())
             .expect("Failed to create graphics context");
@@ -1487,10 +1562,26 @@ impl ApplicationHandler for AsterApp {
                                                 ProcessSort::Name => "NAME ↑",
                                             };
 
+                                        let filter_label = if monitor.process_filter().is_empty() {
+                                            String::new()
+                                        } else if monitor.process_filter_active() {
+                                            format!(
+                                                "  /{}_",
+                                                monitor.process_filter()
+                                            )
+                                        } else {
+                                            format!(
+                                                "  /{}",
+                                                monitor.process_filter()
+                                            )
+                                        };
+
                                         let process_heading = format!(
-                                            "PROCESSES ({}) {}",
+                                            "PROCESSES ({}/{}) {}{}",
+                                            monitor.filtered_process_count(),
                                             monitor.process_count(),
                                             sort_label,
+                                            filter_label,
                                         );
 
                                         self.renderer.draw_text(
@@ -1503,25 +1594,24 @@ impl ApplicationHandler for AsterApp {
 
                                         content_y += 30;
 
-                                        for (index, process) in monitor
-                                            .visible_processes()
+                                        for process in monitor
+                                            .visible_filtered_processes()
                                             .iter()
-                                            .enumerate()
                                         {
-                                            let actual_index = monitor.process_scroll() + index;
-                                            let selected = actual_index == monitor.selected_process_index();
-                                            let marker = 
-                                                if actual_index == monitor.selected_process_index() {
-                                                    ">"
-                                                } else {
-                                                    " "
-                                                };
+                                            let selected = monitor.selected_pid() == Some(process.pid());
+                                            
+                                            let marker = if selected {
+                                                ">"
+                                            } else {
+                                                " "
+                                            };
 
                                             let process_color = if selected {
                                                 cursor
                                             } else {
                                                 foreground
                                             };
+
 
                                             let process_name = process
                                                     .name()
@@ -1566,7 +1656,7 @@ impl ApplicationHandler for AsterApp {
                                         content_y += 20;
 
                                         self.renderer.draw_text(
-                                            "C CPU   M Memory   N Name",
+                                            "C CPU   M Memory   N Name   / Filter   X Clear",
                                             content_x,
                                             content_y,
                                             11.0,
@@ -1582,20 +1672,17 @@ impl ApplicationHandler for AsterApp {
                 if let Some(overlay) = &self.overlay {
                     match overlay {
                         AsterOverlay::Shortcuts => {
-                            let modal_width = 820_u32.min(
+                            let modal_width = 860_u32.min(
                                 size.width.saturating_sub(50)
                             );
 
-                            let modal_height = 470_u32.min(
-                                size.height.saturating_sub(60)
+                            let modal_height = 610_u32.min(
+                                size.height.saturating_sub(50)
                             );
 
                             let modal_x = size.width.saturating_sub(modal_width) / 2;
-                            let modal_y = size.height.saturating_sub(modal_height) / 2;
 
-                            let center_x = modal_x + modal_width / 2;
-                            let left_x = modal_x + 32;
-                            let right_x = center_x + 28;
+                            let modal_y = size.height.saturating_sub(modal_height) / 2;
 
                             self.renderer.draw_rect(
                                 modal_x,
@@ -1614,7 +1701,7 @@ impl ApplicationHandler for AsterApp {
                             );
 
                             self.renderer.draw_text(
-                                "Aster's Shortcuts",
+                                "ASTER SHORTCUTS",
                                 modal_x + 28,
                                 modal_y + 20,
                                 16.0,
@@ -1622,8 +1709,8 @@ impl ApplicationHandler for AsterApp {
                             );
 
                             self.renderer.draw_text(
-                                "Esc",
-                                modal_x + modal_width - 55,
+                                "Esc to close",
+                                modal_x + modal_width - 120,
                                 modal_y + 22,
                                 10.0,
                                 foreground,
@@ -1637,223 +1724,272 @@ impl ApplicationHandler for AsterApp {
                                 cursor,
                             );
 
-                            let content_top = modal_y + 82;
-                            let middle_y = content_top + 155;
-                            let content_bottom = modal_y + modal_height - 28;
+                            let left_x = modal_x + 34;
+                            let right_x = modal_x + modal_width / 2 + 24;
 
-                            self.renderer.draw_rect(
-                                center_x,
-                                content_top,
-                                1,
-                                content_bottom.saturating_sub(content_top),
-                                cursor,
-                            );
+                            let heading_size = 13.0;
+                            let label_size = 12.0;
+                            let shortcut_size = 10.0;
 
-                            self.renderer.draw_rect(
-                                modal_x + 26,
-                                middle_y,
-                                modal_width.saturating_sub(52),
-                                1,
-                                cursor,
-                            );
+                            let item_gap = 43_u32;
 
-                            let heading_size = 14.0;
-                            let label_size = 13.5;
-                            let shortcut_size = 11.5;
+                            let mut y = modal_y + 78;
 
                             self.renderer.draw_text(
                                 "TABS",
                                 left_x,
-                                content_top,
+                                y,
                                 heading_size,
                                 cursor,
                             );
 
-                            self.renderer.draw_text(
-                                "New Tab",
-                                left_x,
-                                content_top + 32,
-                                label_size,
-                                foreground,
-                            );
+                            y += 29;
 
-                            self.renderer.draw_text(
-                                "Ctrl+Shift+T",
-                                left_x,
-                                content_top + 52,
-                                shortcut_size,
-                                cursor,
-                            );
+                            for (label, shortcut) in [
+                                ("New Tab", "Ctrl+Shift+T"),
+                                ("Close Tab", "Ctrl+Shift+W"),
+                                (
+                                    "Next / Previous",
+                                    "Ctrl+Tab / Ctrl+Shift+Tab",
+                                ),
+                                ("Rename Tab", "F2"),
+                            ] {
+                                self.renderer.draw_text(
+                                    label,
+                                    left_x,
+                                    y,
+                                    label_size,
+                                    foreground,
+                                );
 
-                            self.renderer.draw_text(
-                                "Close Tab",
-                                left_x + 175,
-                                content_top + 32,
-                                label_size,
-                                foreground,
-                            );
+                                self.renderer.draw_text(
+                                    shortcut,
+                                    left_x,
+                                    y + 18,
+                                    shortcut_size,
+                                    cursor,
+                                );
 
-                            self.renderer.draw_text(
-                                "Ctrl+Shift+W",
-                                left_x + 175,
-                                content_top + 52,
-                                shortcut_size,
-                                cursor,
-                            );
+                                y += item_gap;
+                            }
 
-                            self.renderer.draw_text(
-                                "Next / Previous",
-                                left_x,
-                                content_top + 88,
-                                label_size,
-                                foreground,
-                            );
-
-                            self.renderer.draw_text(
-                                "Ctrl+Tab  /  Ctrl+Shift+Tab",
-                                left_x,
-                                content_top + 108,
-                                shortcut_size,
-                                cursor,
-                            );
-
-                            self.renderer.draw_text(
-                                "PANES",
-                                right_x,
-                                content_top,
-                                heading_size,
-                                cursor,
-                            );
-
-                            self.renderer.draw_text(
-                                "Split Vertical",
-                                right_x,
-                                content_top + 32,
-                                label_size,
-                                foreground,
-                            );
-
-                            self.renderer.draw_text(
-                                "Ctrl+Shift+D",
-                                right_x,
-                                content_top + 52,
-                                label_size,
-                                foreground,
-                            );
-                            
-                            self.renderer.draw_text(
-                                "Split Horizontal",
-                                right_x + 180,
-                                content_top + 32,
-                                label_size,
-                                cursor,
-                            );
-
-                            self.renderer.draw_text(
-                                "Ctrl+Shift+E",
-                                right_x + 180,
-                                content_top + 52,
-                                shortcut_size,
-                                cursor,
-                            );
-
-                            self.renderer.draw_text(
-                                "Monitor/Close/Zoom",
-                                right_x,
-                                content_top + 88,
-                                label_size,
-                                foreground,
-                            );
-
-                            self.renderer.draw_text(
-                                "Ctrl+Shift+M/Q/Z",
-                                right_x,
-                                content_top + 108,
-                                shortcut_size,
-                                cursor,
-                            );
-
-                            let lower_top = middle_y + 24;
+                            y += 8;
 
                             self.renderer.draw_text(
                                 "NAVIGATION",
                                 left_x,
-                                lower_top,
+                                y,
                                 heading_size,
                                 cursor,
                             );
 
-                            self.renderer.draw_text(
-                                "Focus Left/Right",
-                                left_x,
-                                lower_top + 34,
-                                label_size,
-                                foreground,
-                            );
+                            y += 29;
 
-                            self.renderer.draw_text(
-                                "Ctrl+Shift+Left/Right",
-                                left_x,
-                                lower_top + 54,
-                                shortcut_size,
-                                cursor,
-                            );
+                            for (label, shortcut) in [
+                                (
+                                    "Focus Left / Right",
+                                    "Ctrl+Shift+Left / Right",
+                                ),
+                                (
+                                    "Focus Up / Down",
+                                    "Ctrl+Shift+Up / Down",
+                                ),
+                            ] {
+                                self.renderer.draw_text(
+                                    label,
+                                    left_x,
+                                    y,
+                                    label_size,
+                                    foreground,
+                                );
 
-                            self.renderer.draw_text(
-                                "Focus Up/Down",
-                                left_x,
-                                lower_top + 88,
-                                label_size,
-                                foreground,
-                            );
+                                self.renderer.draw_text(
+                                    shortcut,
+                                    left_x,
+                                    y + 18,
+                                    shortcut_size,
+                                    cursor,
+                                );
 
-                            self.renderer.draw_text(
-                                "Ctrl+Shift+Up/Down",
-                                left_x,
-                                lower_top + 108,
-                                shortcut_size,
-                                cursor,
-                            );
+                                y += item_gap;
+                            }
+
+                            y += 8;
 
                             self.renderer.draw_text(
                                 "TERMINAL",
-                                right_x,
-                                lower_top,
+                                left_x,
+                                y,
                                 heading_size,
                                 cursor,
                             );
 
-                            self.renderer.draw_text(
-                                "Search",
-                                right_x,
-                                lower_top + 34,
-                                label_size,
-                                foreground,
-                            );
+                            y += 29;
+
+                            for (label, shortcut) in [
+                                ("Search", "Ctrl+Shift+F"),
+                                (
+                                    "Copy / Paste",
+                                    "Ctrl+Shift+C / Ctrl+Shift+V",
+                                ),
+                            ] {
+                                self.renderer.draw_text(
+                                    label,
+                                    left_x,
+                                    y,
+                                    label_size,
+                                    foreground,
+                                );
+
+                                self.renderer.draw_text(
+                                    shortcut,
+                                    left_x,
+                                    y + 18,
+                                    shortcut_size,
+                                    cursor,
+                                );
+
+                                y += item_gap;
+                            }
+
+                            let mut y = modal_y + 78;
 
                             self.renderer.draw_text(
-                                "Ctrl+Shift+F",
+                                "PANES",
                                 right_x,
-                                lower_top + 54,
-                                shortcut_size,
+                                y,
+                                heading_size,
                                 cursor,
                             );
 
-                            self.renderer.draw_text(
-                                "Copy/Paste",
-                                right_x,
-                                lower_top + 88,
-                                label_size,
-                                foreground,
-                            );
+                            y += 29;
+
+                            for (label, shortcut) in [
+                                (
+                                    "Split Vertical",
+                                    "Ctrl+Shift+D",
+                                ),
+                                (
+                                    "Split Horizontal",
+                                    "Ctrl+Shift+E",
+                                ),
+                                (
+                                    "Close Pane",
+                                    "Ctrl+Shift+Q",
+                                ),
+                                (
+                                    "Zoom Pane",
+                                    "Ctrl+Shift+Z",
+                                ),
+                            ] {
+                                self.renderer.draw_text(
+                                    label,
+                                    right_x,
+                                    y,
+                                    label_size,
+                                    foreground,
+                                );
+
+                                self.renderer.draw_text(
+                                    shortcut,
+                                    right_x,
+                                    y + 18,
+                                    shortcut_size,
+                                    cursor,
+                                );
+
+                                y += item_gap;
+                            }
+
+                            // ─────────────────────────────
+                            // RIGHT — TOOLS
+                            // ─────────────────────────────
+
+                            y += 8;
 
                             self.renderer.draw_text(
-                                "Ctrl+Shift+C/V",
+                                "TOOLS",
                                 right_x,
-                                lower_top + 108,
-                                shortcut_size,
+                                y,
+                                heading_size,
                                 cursor,
                             );
+
+                            y += 29;
+
+                            for (label, shortcut) in [
+                                (
+                                    "System Monitor",
+                                    "Ctrl+Shift+M",
+                                ),
+                                (
+                                    "Command Palette",
+                                    "Ctrl+Shift+P",
+                                ),
+                            ] {
+                                self.renderer.draw_text(
+                                    label,
+                                    right_x,
+                                    y,
+                                    label_size,
+                                    foreground,
+                                );
+
+                                self.renderer.draw_text(
+                                    shortcut,
+                                    right_x,
+                                    y + 18,
+                                    shortcut_size,
+                                    cursor,
+                                );
+
+                                y += item_gap;
+                            }
+
+                            y += 8;
+
+                            self.renderer.draw_text(
+                                "ASTER COMMANDS",
+                                right_x,
+                                y,
+                                heading_size,
+                                cursor,
+                            );
+
+                            y += 29;
+
+                            for (label, shortcut) in [
+                                (
+                                    "Command Mode",
+                                    ":",
+                                ),
+                                (
+                                    "Autocomplete",
+                                    "Tab",
+                                ),
+                                (
+                                    "Command History",
+                                    "Up / Down",
+                                ),
+                            ] {
+                                self.renderer.draw_text(
+                                    label,
+                                    right_x,
+                                    y,
+                                    label_size,
+                                    foreground,
+                                );
+
+                                self.renderer.draw_text(
+                                    shortcut,
+                                    right_x,
+                                    y + 18,
+                                    shortcut_size,
+                                    cursor,
+                                );
+
+                                y += item_gap;
+                            }
                         }
 
                         AsterOverlay::CommandPalette {
@@ -2081,17 +2217,73 @@ impl ApplicationHandler for AsterApp {
                             input,
                             error,
                         } => {
-                            let bar_width = 650_u32.min(size.width.saturating_sub(60));
-                            let bar_height = 
+                            let bar_width =
+                                720_u32.min(
+                                    size.width.saturating_sub(60)
+                                );
+
+                            let inner_width = bar_width.saturating_sub(48);
+
+                            let command_text = format!(":{}", input);
+
+                            let command_font_size = 16.0;
+                            let command_line_height = 23_u32;
+
+                            let command_char_width = command_font_size as u32;
+
+                            let command_chars_per_line =
+                                (inner_width / command_char_width)
+                                    .max(1) as usize;
+
+                            let command_char_count = command_text.chars().count();
+
+                            let command_lines =
+                                (
+                                    command_char_count
+                                        + command_chars_per_line
+                                        - 1
+                                ) / command_chars_per_line;
+
+                            let command_lines = command_lines.max(1) as u32;
+
+                            let error_lines =
+                                error.as_ref()
+                                    .map(|message| {
+                                        let chars_per_line =
+                                            (inner_width / 11)
+                                                .max(1) as usize;
+
+                                        (
+                                            message.chars().count()
+                                                + chars_per_line
+                                                - 1
+                                        ) / chars_per_line
+                                    })
+                                    .unwrap_or(1)
+                                    .max(1) as u32;
+
+                            let message_height =
                                 if error.is_some() {
-                                    105
+                                    error_lines * 18
                                 } else {
-                                    78
+                                    18
                                 };
 
-                            let bar_x = size.width.saturating_sub(bar_width) / 2;
-                            let bar_y = size.height.saturating_sub(bar_height)
-                                .saturating_sub(35);
+                            let bar_height =
+                                30
+                                + command_lines * command_line_height
+                                + message_height
+                                + 30;
+
+                            let bar_x =
+                                size.width
+                                    .saturating_sub(bar_width)
+                                    / 2;
+
+                            let bar_y =
+                                size.height
+                                    .saturating_sub(bar_height)
+                                    .saturating_sub(35);
 
                             self.renderer.draw_rect(
                                 bar_x,
@@ -2109,41 +2301,67 @@ impl ApplicationHandler for AsterApp {
                                 cursor,
                             );
 
-                            let command_text = format!(":{}", input);
-
-                            self.renderer.draw_text(
+                            self.renderer.draw_wrapped_text(
                                 &command_text,
                                 bar_x + 24,
                                 bar_y + 18,
-                                16.0,
+                                inner_width,
+                                command_font_size,
+                                command_line_height,
                                 foreground,
                             );
 
-                            let cursor_x = bar_x + 24 + (command_text.chars().count() as u32 * 16);
+                            let cursor_character_index = command_char_count;
+
+                            let cursor_line = cursor_character_index / command_chars_per_line;
+
+                            let cursor_column = cursor_character_index % command_chars_per_line;
+
+                            let cursor_x =
+                                bar_x
+                                + 24
+                                + cursor_column as u32
+                                    * command_char_width;
+
+                            let cursor_y =
+                                bar_y
+                                + 17
+                                + cursor_line as u32
+                                    * command_line_height;
 
                             self.renderer.draw_rect(
                                 cursor_x,
-                                bar_y + 17,
+                                cursor_y,
                                 2,
                                 20,
                                 cursor,
                             );
 
+                            let message_y =
+                                bar_y
+                                + 24
+                                + command_lines
+                                    * command_line_height;
+
                             if let Some(error) = error {
-                                self.renderer.draw_text(
+                                self.renderer.draw_wrapped_text(
                                     error,
                                     bar_x + 24,
-                                    bar_y + 52,
+                                    message_y,
+                                    inner_width,
                                     11.0,
+                                    18,
                                     cursor,
                                 );
                             } else {
-                                self.renderer.draw_text(
+                                self.renderer.draw_wrapped_text(
                                     "Enter Run   Tab Complete   ↑↓ History   Esc Cancel",
                                     bar_x + 24,
-                                    bar_y + 50,
+                                    message_y,
+                                    inner_width,
                                     10.0,
-                                    cursor,              
+                                    17,
+                                    cursor,
                                 );
                             }
                         }
@@ -2473,12 +2691,23 @@ impl ApplicationHandler for AsterApp {
                             pane_height,
                         );
 
-                        if let Some(terminal) = self.active_tab_mut().terminal_mut() {
-                            terminal.start_selection(
+                        if let Some(terminal) =
+                            self.active_tab_mut().terminal_mut()
+                        {
+                            if terminal.can_start_selection(
                                 cell_x,
                                 cell_y,
-                            );
-                            self.selecting_text = true;
+                            ) {
+                                terminal.start_selection(
+                                    cell_x,
+                                    cell_y,
+                                );
+
+                                self.selecting_text = true;
+                            } else {
+                                terminal.clear_selection();
+                                self.selecting_text = false;
+                            }
                         }
 
                         window.request_redraw();
@@ -2514,11 +2743,39 @@ impl ApplicationHandler for AsterApp {
                     }
                 };
 
-                if let Some(terminal) = self.active_tab_mut().terminal_mut() {
-                    if lines > 0 {
-                        terminal.scroll_view_up(lines as usize);
-                    } else if lines < 0 {
-                        terminal.scroll_view_down((-lines) as usize);
+                match self
+                    .active_tab_mut()
+                    .active_pane_mut()
+                    .kind_mut()
+                {
+                    PaneKind::Terminal(terminal_pane) => {
+                        let terminal =
+                            terminal_pane.terminal_mut();
+
+                        if lines > 0 {
+                            terminal.scroll_view_up(
+                                lines as usize
+                            );
+                        } else if lines < 0 {
+                            terminal.scroll_view_down(
+                                (-lines) as usize
+                            );
+                        }
+                    }
+
+                    PaneKind::SystemMonitor(monitor) => {
+                        let amount =
+                            lines.unsigned_abs()
+                                .max(1)
+                                .min(8);
+
+                        for _ in 0..amount {
+                            if lines > 0 {
+                                monitor.select_previous_process();
+                            } else if lines < 0 {
+                                monitor.select_next_process();
+                            }
+                        }
                     }
                 }
 
@@ -3131,7 +3388,7 @@ impl ApplicationHandler for AsterApp {
                     }
                 }
 
-                if self.terminal_input_fresh {
+                if self.terminal_input_fresh && self.active_tab().active_pane_is_terminal() {
                     if let Key::Character(character) = &event.logical_key {
                         if character == ":" && !control && !self.modifiers.alt_key() {
                             self.reset_command_history_navigation();
@@ -3163,6 +3420,10 @@ impl ApplicationHandler for AsterApp {
 
                     Key::Named(NamedKey::Escape) => {
                         Some(PaneInput::Escape)
+                    }
+
+                    Key::Named(NamedKey::Backspace) => {
+                        Some(PaneInput::Backspace)
                     }
 
                     Key::Character(character) => {

@@ -47,12 +47,15 @@ pub struct PtySession {
 }
 
 impl PtySession {
-    pub fn new() -> Self {
+    pub fn new(
+        columns: usize,
+        rows: usize,
+    ) -> Self {
         let pty_system = native_pty_system();
 
         let pair = pty_system.openpty(PtySize {
-            rows: 24,
-            cols: 80,
+            rows: rows.clamp(1, u16::MAX as usize) as u16,
+            cols: columns.clamp(1, u16::MAX as usize) as u16,
             pixel_width: 0,
             pixel_height: 0,
         }).expect("Failed to create PTY");

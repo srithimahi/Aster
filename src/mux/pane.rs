@@ -271,6 +271,7 @@ pub enum PaneInput {
     Down,
     Enter,
     Escape,
+    Backspace,
     Character(char),
 }
 
@@ -307,7 +308,10 @@ impl TerminalPane {
                 rows,
             ),
 
-            pty: PtySession::new(),
+            pty: PtySession::new(
+                columns,
+                rows,
+            ),
             parser: AnsiParser::new(),
         }  
     }
@@ -342,6 +346,16 @@ impl TerminalPane {
         columns: usize,
         rows: usize,
     ) {
+        if columns == 0 || rows == 0 {
+            return;
+        }
+
+        if self.terminal.width() == columns
+            && self.terminal.height() == rows
+        {
+            return;
+        }
+
         self.terminal.resize(
             columns,
             rows,
@@ -457,10 +471,14 @@ pub struct SystemMonitorPane {
     process_sort: ProcessSort,
     process_scroll: usize,
 
+    process_filter: String,
+    process_filter_active: bool,
+
     last_refresh: Instant,
     refresh_interval: Duration,
 
     view: SystemMonitorView,
+    kill_return_view: SystemMonitorView,
 }
 
 impl SystemMonitorPane {
@@ -505,12 +523,16 @@ impl SystemMonitorPane {
             process_sort: ProcessSort::Cpu,
             process_scroll: 0,
 
+            process_filter: String::new(),
+            process_filter_active: false,
+
             system,
 
             last_refresh: Instant::now(),
             refresh_interval: Duration::from_secs(1),
 
             view: SystemMonitorView::Overview,
+            kill_return_view: SystemMonitorView::Overview,
         }
     }
 
@@ -970,49 +992,222 @@ impl SystemMonitorPane {
     pub fn select_previous_process(
         &mut self,
     ) {
-        if self.processes.is_empty() {
+        let filtered = self.filtered_processes();
+
+        if filtered.is_empty() {
             self.selected_pid = None;
             self.process_scroll = 0;
             return;
         }
 
-        let current_index = self.selected_process_index();
+        let current_index = self.selected_pid 
+                                .and_then(|pid| {
+                                    filtered
+                                        .iter()
+                                        .position(|process| {
+                                            process.pid() == pid
+                                        })
+                                }).unwrap_or(0);
+        
         let new_index = if current_index == 0 {
-            self.processes.len() - 1 
+            filtered.len() - 1
         } else {
             current_index - 1
         };
 
-        self.selected_pid = Some(
-            self.processes[new_index].pid()
-        );
+        self.selected_pid = Some(filtered[new_index].pid());
 
-        self.keep_selection_visible();
+        if new_index < self.process_scroll {
+            self.process_scroll = new_index;
+        } else if new_index >= self.process_scroll + VISIBLE_PROCESS_ROWS {
+            self.process_scroll = new_index + 1 - VISIBLE_PROCESS_ROWS;
+        }
     }
 
     pub fn select_next_process(
         &mut self,
     ) {
-        if self.processes.is_empty() {
+        let filtered = self.filtered_processes();
+        if filtered.is_empty() {
             self.selected_pid = None;
             self.process_scroll = 0;
             return;
         }
 
-        let current_index = self.selected_process_index();
-        let new_index = (current_index + 1) % self.processes.len();
+        let current_index = self.selected_pid
+                                .and_then(|pid| {
+                                    filtered
+                                        .iter()
+                                        .position(|process| {
+                                            process.pid() == pid
+                                        })
+                                }).unwrap_or(0);
+        
+        let new_index = (current_index + 1) % filtered.len();
 
-        self.selected_pid = Some(
-            self.processes[new_index].pid()
-        );
+        self.selected_pid = Some(filtered[new_index].pid());
 
-        self.keep_selection_visible();
+        if new_index < self.process_scroll {
+            self.process_scroll = new_index;
+        } else if new_index >= (self.process_scroll + VISIBLE_PROCESS_ROWS) {
+            self.process_scroll = new_index + 1 - VISIBLE_PROCESS_ROWS;
+        }
+    }
+
+    pub fn process_filter(
+        &self,
+    ) -> &str {
+        &self.process_filter
+    }
+
+    pub fn process_filter_active(
+        &self,
+    ) -> bool {
+        self.process_filter_active
+    }
+
+    pub fn filtered_processes(
+        &self,
+    ) -> Vec<&ProcessInfo> {
+        if self.process_filter.is_empty() {
+            return self.processes
+                .iter()
+                .collect();
+        }
+
+        let query = self.process_filter.to_ascii_lowercase();
+
+        self.processes
+            .iter()
+            .filter(|process| {
+                process.name()
+                    .to_ascii_lowercase()
+                    .contains(&query)
+                    ||
+                process
+                    .pid()
+                    .to_string()
+                    .contains(&query)
+            }).collect()
+    }
+
+    pub fn visible_filtered_processes(
+        &self,
+    ) -> Vec<&ProcessInfo> {
+        let filtered = self.filtered_processes();
+        let start = self.process_scroll.min(filtered.len());
+        let end = (start + VISIBLE_PROCESS_ROWS).min(filtered.len());
+        filtered[start..end].to_vec()
+    }
+
+    pub fn filtered_process_count(
+        &self,
+    ) -> usize {
+        self.filtered_processes().len()
+    }
+
+    fn start_process_filter(
+        &mut self,
+    ) {
+        self.process_filter_active = true;
+        self.process_filter.clear();
+        self.process_scroll = 0;
+    }
+
+    fn finish_process_filter(
+        &mut self,
+    ) {
+        self.process_filter_active = false;
+        self.select_first_filtered_process();
+    }
+
+    fn cancel_process_filter(
+        &mut self,
+    ) {
+        self.process_filter_active = false;
+        self.process_filter.clear();
+        self.process_scroll = 0;
+
+        if self.selected_process().is_none() {
+            self.selected_pid = self.processes
+                                    .first()
+                                    .map(|process| process.pid());
+        }
+    }
+
+    fn select_first_filtered_process(
+        &mut self,
+    ) {
+        self.process_scroll = 0;
+
+        self.selected_pid = self.filtered_processes()
+                            .first()
+                            .map(|process| process.pid());
+    }
+
+    fn push_process_filter(
+        &mut self,
+        character: char,
+    ) {
+        self.process_filter.push(character);
+        self.select_first_filtered_process();
+    }
+
+    fn pop_process_filter(
+        &mut self,
+    ) {
+        self.process_filter.pop();
+        self.select_first_filtered_process();
+    }
+
+    pub fn clear_process_filter(
+        &mut self,
+    ) {
+        self.process_filter.clear();
+        self.process_filter_active = false;
+        self.process_scroll = 0;
+
+        self.selected_pid = 
+            self.processes
+                .first()
+                .map(|process| process.pid());
     }
 
     pub fn handle_input(
         &mut self,
         input: PaneInput,
     ) -> bool {
+        if self.process_filter_active {
+            match input {
+                PaneInput::Escape => {
+                    self.cancel_process_filter();
+                }
+
+                PaneInput::Enter => {
+                    self.finish_process_filter();
+                }
+
+                PaneInput::Backspace => {
+                    if self.process_filter.is_empty() {
+                        self.cancel_process_filter();
+                    } else {
+                        self.pop_process_filter();
+                    }
+                }
+
+                PaneInput::Character(character) => {
+                    if !character.is_control() {
+                        self.push_process_filter(
+                            character
+                        );
+                    }
+                }
+
+                _ => {}
+            }
+
+            return true;
+        }
         match self.view {
             SystemMonitorView::Overview => {
                 match input {
@@ -1026,6 +1221,47 @@ impl SystemMonitorPane {
                         true
                     }
 
+                    PaneInput::Character('/') => {
+                        self.start_process_filter();
+                        true
+                    }
+
+                    PaneInput::Backspace
+                        if !self.process_filter.is_empty() =>
+                    {
+                        self.process_filter.pop();
+
+                        if self.process_filter.is_empty() {
+                            self.clear_process_filter();
+                        } else {
+                            self.select_first_filtered_process();
+                        }
+
+                        true
+                    }
+
+                    PaneInput::Escape
+                        if !self.process_filter.is_empty() =>
+                    {
+                        self.clear_process_filter();
+                        true
+                    }
+
+                    PaneInput::Character(character)
+                        if character.eq_ignore_ascii_case(&'q')
+                            && !self.process_filter.is_empty() =>
+                    {
+                        self.clear_process_filter();
+                        true
+                    }
+
+                    PaneInput::Character(character)
+                        if character.eq_ignore_ascii_case(&'x')
+                        && !self.process_filter.is_empty() => {
+                            self.clear_process_filter();
+                            true
+                    }
+
                     PaneInput::Character(character)
                     if character.eq_ignore_ascii_case(&'i') => {
                         self.inspect_selected_process();
@@ -1034,6 +1270,12 @@ impl SystemMonitorPane {
 
                     PaneInput::Enter => {
                         self.inspect_selected_process();
+                        true
+                    }
+
+                    PaneInput::Character(character) 
+                    if character.eq_ignore_ascii_case(&'k') => {
+                        self.request_kill_selected_process();
                         true
                     }
 
@@ -1163,6 +1405,7 @@ impl SystemMonitorPane {
         }
 
         self.status_message = None;
+        self.kill_return_view = self.view;
         self.pending_kill_pid = Some(pid);
         self.view = SystemMonitorView::ConfirmKill;
     }
@@ -1185,8 +1428,7 @@ impl SystemMonitorPane {
         &mut self,
     ) {
         self.pending_kill_pid = None;
-
-        self.view = SystemMonitorView::ProcessInspector;
+        self.view = self.kill_return_view;
     }
 
     pub fn confirm_kill(
