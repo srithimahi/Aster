@@ -1,7 +1,7 @@
 [colors]
-background = "#FFFDF6"
-foreground = "#2B2927"
-cursor = "#D97706"
+background = "#FFFDF0"
+foreground = "#2D2510"
+cursor = "#d89c05"
 
 [palette]
 black = "#2B2927"
@@ -20,4 +20,4 @@ bright_yellow = "#C98900"
 bright_blue = "#3974C6"
 bright_magenta = "#A8558F"
 bright_cyan = "#24979D"
-bright_white = "#FFFFFF"
+bright_white = "#5C5548"

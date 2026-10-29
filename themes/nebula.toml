@@ -1,7 +1,7 @@
 [colors]
-background = "#0B0314"
-foreground = "#F0e6ff"
-cursor = "#00f5d4"
+background = "#0B132B"
+foreground = "#E0FBFC"
+cursor = "#00F5D4"
 
 [palette]
 black = "#160a20"

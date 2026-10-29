@@ -40,7 +40,7 @@ use winit::{
     event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent, },
     event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
     keyboard::{Key, ModifiersState, NamedKey,},
-    window::{Window, WindowId},
+    window::{CursorIcon, Window, WindowId},
 };
 
 const TAB_BAR_HEIGHT: u32 = 30;
@@ -2477,6 +2477,84 @@ impl ApplicationHandler for AsterApp {
                 self.mouse_x = position.x;
                 self.mouse_y = position.y;
 
+                let size = window.inner_size();
+
+                let padding = self.config.window.padding;
+
+                let pane_x = padding;
+                let pane_y = TAB_BAR_HEIGHT + padding;
+
+                let pane_width =
+                    size.width.saturating_sub(
+                        padding.saturating_mul(2)
+                    );
+
+                let pane_height =
+                    size.height
+                        .saturating_sub(TAB_BAR_HEIGHT)
+                        .saturating_sub(
+                            padding.saturating_mul(2)
+                        );
+
+                let mut over_text = false;
+
+                if let Some(rect) =
+                    self.active_tab()
+                        .visible_pane_at_position(
+                            position.x,
+                            position.y,
+                            pane_x,
+                            pane_y,
+                            pane_width,
+                            pane_height,
+                        )
+                {
+                    let local_x =
+                        position.x
+                        - rect.x as f64
+                        - 2.0;
+
+                    let local_y =
+                        position.y
+                        - rect.y as f64
+                        - 2.0;
+
+                    if local_x >= 0.0 && local_y >= 0.0
+                    {
+                        let cell_x =
+                            (
+                                local_x
+                                / self.config.font.cell_width
+                                    as f64
+                            ) as usize;
+
+                        let cell_y =
+                            (
+                                local_y
+                                / self.config.font.cell_height
+                                    as f64
+                            ) as usize;
+
+                        if let Some(terminal) =
+                            self.active_tab().terminal()
+                        {
+                            over_text =
+                                terminal.can_start_selection(
+                                    cell_x,
+                                    cell_y,
+                                );
+                        }
+                    }
+                }
+
+                window.set_cursor(
+                    if over_text {
+                        CursorIcon::Text
+                    } else {
+                        CursorIcon::Default
+                    }
+                );
+
                 if self.selecting_text {
                     let size = window.inner_size();
                     let padding = self.config.window.padding;
@@ -2704,9 +2782,8 @@ impl ApplicationHandler for AsterApp {
                                 );
 
                                 self.selecting_text = true;
-                            } else {
-                                terminal.clear_selection();
-                                self.selecting_text = false;
+
+                                window.request_redraw();
                             }
                         }
 
