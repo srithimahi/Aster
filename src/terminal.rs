@@ -244,8 +244,6 @@ impl Terminal {
                 let index = self.index(x, y);
                 print!("{}", self.cells[index].character);
             }
-
-            println!();
         }
     }
 

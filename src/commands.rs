@@ -24,8 +24,6 @@ pub enum AsterCommand {
 
     Shortcuts,
     CommandPalette,
-
-    ReloadConfig,
 }
 
 impl AsterCommand {
@@ -56,8 +54,6 @@ impl AsterCommand {
 
             Self::Shortcuts => "Shortcuts",
             Self::CommandPalette => "CommandPalette",
-
-            Self::ReloadConfig => "Reload Config",
         }
     }
 
@@ -88,8 +84,6 @@ impl AsterCommand {
 
             Self::Shortcuts => "shortcuts",
             Self::CommandPalette => "commands",
-
-            Self::ReloadConfig => "reload-config",
         }
     }
 
@@ -119,7 +113,6 @@ impl AsterCommand {
 
             Self::Shortcuts => "Show Aster keyboard shortcuts",
             Self::CommandPalette => "Opens the Aster command palette",
-            Self::ReloadConfig => "Reload Aster config",
         }
     }
 
@@ -204,10 +197,6 @@ impl AsterCommand {
                 Some(Self::CommandPalette)
             }
 
-            "reload-config" | "reload" => {
-                Some(Self::ReloadConfig)
-            }
-
             _ => None,
         }
     }
@@ -236,8 +225,6 @@ impl AsterCommand {
 
         AsterCommand::Shortcuts,
         AsterCommand::CommandPalette,
-
-        AsterCommand::ReloadConfig,
     ];
 
     pub fn matches_query(&self, query: &str) -> bool {

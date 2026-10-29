@@ -11,35 +11,6 @@ use portable_pty::{
     PtySize,
 };
 
-fn debug_pty_output(bytes: &[u8]) {
-    let mut readable = String::new();
-
-    for &byte in bytes {
-        match byte {
-            0x1B => readable.push_str("<ESC>"),
-            b'\r' => readable.push_str("<CR>"),
-            b'\n' => readable.push_str("<LF>\n"),
-            b'\t' => readable.push_str("<TAB>"),
-            0x08 => readable.push_str("<BS>"),
-            0x07 => readable.push_str("<BEL>"),
-
-            0x20..=0x7E => {
-                readable.push(byte as char);
-            }
-
-            _ => {
-                readable.push_str(
-                    &format!("<0x{byte:02X}>")
-                );
-            }
-        }
-    }
-
-    println!("\n========== PTY OUTPUT ==========");
-    println!("{readable}");
-    println!("================================\n");
-}
-
 pub struct PtySession {
     master: Box<dyn MasterPty + Send>,
     writer: Box<dyn Write + Send>,
@@ -90,7 +61,6 @@ impl PtySession {
 
                     Ok(bytes_read) => {
                         let bytes = &buffer[..bytes_read];
-                        debug_pty_output(bytes);
 
                         let output = String::from_utf8_lossy(bytes).to_string();
                         if sender.send(output).is_err() {

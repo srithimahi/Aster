@@ -162,11 +162,6 @@ impl AsterApp {
         self.active_tab = self.tabs.len() - 1;
 
         self.terminal_input_fresh = true;
-
-        println!(
-            "Created tab {}",
-            self.active_tab + 1,
-        );
     }
 
     fn next_tab(&mut self) {
@@ -175,11 +170,6 @@ impl AsterApp {
         }
 
         self.active_tab = (self.active_tab + 1) % self.tabs.len();
-
-        println!(
-            "Switched to tabbie {}",
-            self.active_tab + 1
-        );
     }
 
     fn previous_tab(&mut self) {
@@ -191,8 +181,6 @@ impl AsterApp {
         } else {
             self.active_tab -= 1;
         }
-
-        println!("Switched to tabbie {}", self.active_tab + 1);
     }
 
     fn close_active_tab(&mut self) {
@@ -270,11 +258,6 @@ impl AsterApp {
 
         self.theme = Theme::load(&path);
         self.current_theme = actual_name.clone();
-
-        println!(
-            "Switched Aster theme to '{}'",
-            self.current_theme
-        );
 
         window.request_redraw();
         Ok(())
@@ -809,12 +792,6 @@ impl AsterApp {
                 );
                 window.request_redraw();
             }
-
-            AsterCommand::ReloadConfig => {
-                println!(
-                    "Config reload coming next"
-                );
-            }
         }
     }
 }
@@ -970,14 +947,6 @@ impl ApplicationHandler for AsterApp {
                         rows as usize,
                     );
                 }
-
-                println!(
-                    "Aster resized: {} x {} pixels -> {} x {} cells",
-                    size.width,
-                    size.height,
-                    columns,
-                    rows,
-                );
 
                 window.request_redraw();
             }
@@ -2678,17 +2647,9 @@ impl ApplicationHandler for AsterApp {
                         let close_button_start = TAB_WIDTH as f64 - TAB_CLOSE_WIDTH as f64;
 
                         if position_inside_tab >= close_button_start {
-                            println!(
-                                "Closing tab {}",
-                                clicked_tab + 1,
-                            );
 
                             self.close_tab(clicked_tab);
                         } else {
-                            println!(
-                                "Activating tab {}",
-                                clicked_tab + 1,
-                            );
 
                             self.active_tab = clicked_tab;
                         }
@@ -2730,11 +2691,6 @@ impl ApplicationHandler for AsterApp {
                         SplitDrag {
                             split_id: separator.split_id,
                         }
-                    );
-
-                    println!(
-                        "Started dragging split {}",
-                        separator.split_id,
                     );
 
                     return;
