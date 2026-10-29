@@ -104,16 +104,22 @@ Powershell run inside a pseudo-terminal (PTY). Aster would read this resulting b
 
 Aster is built for Windows and uses Windows PTY/PowerShell functionality.
 
-You'll need Windows 10/11 and Rust and Cargo
+You'll need Windows 10/11 and Rust
+
+**Rust Installation**
+
+You can install Rust at the link below.
+
+<https://rustup.rs/>
 
 **Clone**
 
-````git clone https://github.com/srithimahi/Aster.git
-cd Aster```
+`git clone https://github.com/srithimahi/Aster.git`
+`cd Aster`
 
 **Run**
 
-```cargo run --release```
+`cargo run --release`
 
 That's it!
 
@@ -129,27 +135,10 @@ It ended up teaching me that a terminal emulator sits at the intersection of far
 
 The license is included at:
 
-```assets/font/OFL.txt```
+`assets/font/OFL.txt`
 
 ## Author
 
-Built by *Srithika*
+Built by _Srithika_
 
 Aster was built for Hack Club Stardance and it is definitely a long-term commitment for me and it was super fun. Thank you for reading through this!
-
-
-
-
-
-
--
--
--
--
--
--
--
--
--
--
-````
